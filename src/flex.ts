@@ -117,7 +117,9 @@ export function digestCard(list: ProjectMetrics[], dateLabel: string, dashboardU
   );
 }
 
-export function confirmCard(p: Preview, pendingId: string): Msg {
+/** Confirm card. `proactive` cards (sent by the bot on its own) use pconfirm/pedit/pcancel. */
+export function confirmCard(p: Preview, pendingId: string, proactive = false, previewUrl?: string): Msg {
+  const pre = proactive ? "p" : "";
   const lines: Box[] = p.lines.map((l) => ({
     type: "box", layout: "horizontal", spacing: "md", paddingTop: "6px", paddingBottom: "6px",
     contents: [
@@ -131,11 +133,12 @@ export function confirmCard(p: Preview, pendingId: string): Msg {
   return flex(
     `รอยืนยัน: ${p.title}`,
     bubble(
-      [text("รอยืนยัน", { size: "xs", weight: "bold", color: "#2A3A7A" }), text(p.title, { weight: "bold", size: "md" }), text(p.subtitle, { size: "xs", color: "#4A5568" })],
+      [text(p.kicker ?? "รอยืนยัน", { size: "xs", weight: "bold", color: "#2A3A7A" }), text(p.title, { weight: "bold", size: "md" }), text(p.subtitle, { size: "xs", color: "#4A5568" })],
       [...lines, ...warn],
       [
-        postback(p.confirmLabel, `confirm:${pendingId}`, true),
-        { type: "box", layout: "horizontal", spacing: "sm", contents: [postback("แก้ไข", `edit:${pendingId}`, false, "ขอแก้ไข"), postback("ยกเลิก", `cancel:${pendingId}`, false)] },
+        postback(p.confirmLabel, `${pre}confirm:${pendingId}`, true),
+        ...(previewUrl ? [uri("ดูฉบับเต็ม", previewUrl)] : []),
+        { type: "box", layout: "horizontal", spacing: "sm", contents: [postback("แก้ไข", `${pre}edit:${pendingId}`, false, "ขอแก้ไข"), postback(p.cancelLabel ?? "ยกเลิก", `${pre}cancel:${pendingId}`, false)] },
       ],
     ),
   );
@@ -163,4 +166,74 @@ export function projectPicker(prompt: string, projects: { id: string; name: stri
 
 export function textMsg(t: string): Msg {
   return { type: "text", text: t.slice(0, 5000) } as Msg;
+}
+
+// ------------------------------------------------------------------ generic info card
+
+export type Btn = { label: string; data?: string; url?: string; primary?: boolean; displayText?: string };
+export interface InfoCard {
+  kicker: string;
+  title: string;
+  subtitle?: string;
+  tone?: "info" | "warn" | "danger" | "ok";
+  rows?: { label: string; value: string; color?: "red" | "amber" | "green" | "muted" }[];
+  bars?: { label: string; percent: number; value?: string; tone?: "red" | "amber" | "green" }[];
+  sections?: { title: string; lines: string[]; tone?: "red" | "amber" | "green" | "muted" }[];
+  note?: string;
+  buttons?: Btn[];
+}
+
+const TONE = { red: RED, amber: AMBER, green: GREEN, muted: MUTED } as const;
+const HEAD: Record<NonNullable<InfoCard["tone"]>, string> = { info: "#EEF2FD", warn: "#FFF1E0", danger: "#FDECEA", ok: "#E7F4EC" };
+const HEAD_TEXT: Record<NonNullable<InfoCard["tone"]>, string> = { info: "#2A3A7A", warn: "#6B3400", danger: RED, ok: GREEN };
+
+function toButton(b: Btn): Box {
+  if (b.url) return uri(b.label, b.url, b.primary);
+  return postback(b.label, b.data ?? "", b.primary, b.displayText);
+}
+
+export function infoCard(c: InfoCard): Msg {
+  const tone = c.tone ?? "info";
+  const body: Box[] = [];
+  for (const r of c.rows ?? []) {
+    body.push({ type: "box", layout: "horizontal", spacing: "md", contents: [text(r.label, { size: "xs", color: MUTED, flex: 2 }), text(r.value, { size: "sm", flex: 5, weight: "bold", color: r.color ? TONE[r.color] : "#18202B" })] });
+  }
+  for (const b of c.bars ?? []) {
+    const col = b.tone ? TONE[b.tone] : ACCENT;
+    body.push({ type: "box", layout: "horizontal", margin: "md", contents: [text(b.label, { flex: 1, size: "sm" }), text(b.value ?? `${b.percent}%`, { flex: 0, align: "end", weight: "bold", color: b.tone ? col : "#18202B" })] }, bar(Math.min(100, b.percent), col));
+  }
+  for (const sct of c.sections ?? []) {
+    if (!sct.lines.length) continue;
+    if (body.length) body.push(sep());
+    body.push(text(sct.title, { size: "xs", weight: "bold", color: sct.tone ? TONE[sct.tone] : "#3D4855", margin: "md" }));
+    for (const l of sct.lines.slice(0, 8)) body.push(text(l, { size: "sm" }));
+    if (sct.lines.length > 8) body.push(text(`+ อีก ${sct.lines.length - 8} รายการ`, { size: "xs", color: ACCENT }));
+  }
+  if (c.note) body.push({ type: "box", layout: "vertical", backgroundColor: "#F4F6F9", cornerRadius: "8px", paddingAll: "8px", margin: "md", contents: [text(c.note, { size: "xs", color: "#3D4855" })] });
+  if (!body.length) body.push(text(" "));
+  const btns = c.buttons ?? [];
+  const footer: Box[] = [];
+  if (btns[0]) footer.push(toButton(btns[0]));
+  const rest = btns.slice(1, 5);
+  for (let i = 0; i < rest.length; i += 2) {
+    footer.push({ type: "box", layout: "horizontal", spacing: "sm", contents: rest.slice(i, i + 2).map(toButton) });
+  }
+  return flex(
+    `${c.kicker}: ${c.title}`,
+    bubble(
+      [text(c.kicker, { size: "xs", weight: "bold", color: HEAD_TEXT[tone] }), text(c.title, { weight: "bold", size: "md" }), ...(c.subtitle ? [text(c.subtitle, { size: "xs", color: "#4A5568" })] : [])],
+      body,
+      footer.length ? footer : null,
+      HEAD[tone],
+    ),
+  );
+}
+
+/** Text with quick-reply buttons (postbacks). */
+export function quickText(t: string, items: { label: string; data: string; displayText?: string }[]): Msg {
+  return {
+    type: "text",
+    text: t.slice(0, 5000),
+    quickReply: { items: items.slice(0, 13).map((i) => ({ type: "action", action: { type: "postback", label: i.label.slice(0, 20), data: i.data.slice(0, 300), displayText: (i.displayText ?? i.label).slice(0, 300) } })) },
+  } as unknown as Msg;
 }

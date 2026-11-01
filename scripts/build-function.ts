@@ -9,6 +9,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
 const version = (name: string) => String(pkg.dependencies[name] ?? "").replace(/^[\^~]/, "");
 
 const html = fs.readFileSync(path.join(root, "public/dashboard.html"), "utf8");
+const settings = fs.readFileSync(path.join(root, "public/settings.html"), "utf8");
 const png = fs.readFileSync(path.join(root, "assets/richmenu.png")).toString("base64");
 
 const result = await build({
@@ -28,6 +29,7 @@ const result = await build({
           loader: "js",
           contents:
             `export const dashboardHtml = () => ${JSON.stringify(html)};\n` +
+            `export const settingsHtml = () => ${JSON.stringify(settings)};\n` +
             `export const richMenuImage = () => Buffer.from(${JSON.stringify(png)}, "base64");\n`,
         }));
         // Bare package imports → "name@version" so Bun installs the same versions we tested with.

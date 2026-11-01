@@ -16,6 +16,9 @@
   nav button { height:34px; padding:0 14px; border-radius:999px; border:1px solid #4A5A70; background:transparent; color:#DCE4EE; font:600 14px inherit; font-family:inherit; cursor:pointer; }
   nav button[aria-pressed="true"] { background:#fff; color:var(--ink); border-color:#fff; }
   header .meta { display:flex; align-items:center; gap:10px; font-size:13px; color:#C8D3E0; }
+  header a.btn.ghost { background:transparent; border:1px solid #4A5A70; color:#DCE4EE; }
+  .lvl-high { color:var(--red); font-weight:600; } .lvl-medium { color:var(--amber); font-weight:600; } .lvl-low { color:var(--muted); }
+  .chk { font-size:13px; line-height:1.7; }
   header a.btn { height:36px; padding:0 14px; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; font-size:14px; text-decoration:none; display:flex; align-items:center; }
   main { max-width:1360px; margin:0 auto; padding:20px; display:flex; flex-direction:column; gap:16px; }
   h1 { margin:0; font-size:24px; }
@@ -60,7 +63,7 @@
 <header>
   <strong>PM Assistant</strong>
   <nav id="tabs" aria-label="เลือกโปรเจกต์"></nav>
-  <div class="meta"><span id="updated"></span><a class="btn" id="planeLink" href="#" target="_blank" rel="noopener">เปิดใน Plane</a></div>
+  <div class="meta"><span id="updated"></span><a class="btn" id="planeLink" href="#" target="_blank" rel="noopener">เปิดในระบบงาน</a><a class="btn ghost" id="settingsLink" href="#">ตั้งค่า</a></div>
 </header>
 <main>
   <div id="error" role="alert"></div>
@@ -86,8 +89,17 @@
     <div class="legend"><span><i style="border-top:3px solid #2448C8"></i>งานเปิด</span><span><i style="border-top:3px solid #A2231B"></i>เลยกำหนด</span><span><i style="border-top:3px solid #C2410C"></i>Blocked</span><span><i style="border-top:3px dashed #8A94A3"></i>ค้างนาน</span></div>
     <span class="note">บันทึกทุกวัน 23:50 และทุกครั้งที่เปิด Dashboard หรือส่งสรุปเช้า</span>
   </section>
+  <div class="row" id="records">
+    <section class="card wide" id="risks"><div class="head"><h2>Risk log</h2><span class="note">บันทึกผ่านแชต เช่น “ความเสี่ยง: API หน่วยงานล่าช้า”</span></div><div class="tbl" id="riskTbl"></div>
+      <h2 style="margin-top:8px">การตัดสินใจล่าสุด</h2><div id="decisions"></div></section>
+    <section class="card narrow"><h2>Change request</h2><div class="tbl" id="crTbl"></div></section>
+  </div>
   <div class="row">
-    <section class="card wide"><h2>ประวัติสิ่งที่บอททำใน Plane</h2><div id="activity"></div></section>
+    <section class="card wide"><h2>งวดงานและ TOR</h2><div class="tbl" id="msTbl"></div></section>
+    <section class="card narrow"><h2>Man-day เทียบงบ</h2><div id="budget"></div></section>
+  </div>
+  <div class="row">
+    <section class="card wide"><h2>ประวัติสิ่งที่บอททำ</h2><div id="activity"></div></section>
     <section class="card narrow"><h2>การใช้ Claude รายเดือน</h2><div class="tbl" id="usage"></div></section>
   </div>
 </main>
@@ -96,6 +108,7 @@
   const params = new URLSearchParams(location.search);
   const token = params.get("t") || "";
   let project = params.get("project") || "";
+  document.getElementById("settingsLink").href = `/settings?t=${encodeURIComponent(token)}`;
   const $ = (id) => document.getElementById(id);
   const MONTHS = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
   const th = (d) => { if (!d) return "-"; const [y,m,dd] = d.slice(0,10).split("-").map(Number); return `${dd} ${MONTHS[m-1]}`; };
@@ -248,6 +261,35 @@
       fill("trend", empty(`โหลดประวัติไม่สำเร็จ: ${e.message}`));
     }
   }
+  const LV = { high: "สูง", medium: "กลาง", low: "ต่ำ" };
+  const CRS = { pending: "รออนุมัติ", approved: "อนุมัติแล้ว", rejected: "ไม่อนุมัติ", done: "ทำแล้ว", open: "เปิด", closed: "ปิด" };
+  async function loadRecords() {
+    try {
+      const res = await fetch(`/api/records?${new URLSearchParams({ t: token, project })}`);
+      const r = await res.json();
+      if (!res.ok) throw new Error(r.error || res.statusText);
+      if (!r.enabled) { for (const id of ["riskTbl", "crTbl", "msTbl", "budget", "decisions"]) fill(id, empty("ต้องเชื่อมฐานข้อมูล")); return; }
+      const risks = r.risks.filter((x) => x.status === "open").concat(r.risks.filter((x) => x.status !== "open"));
+      fill("riskTbl", table(["รหัส", "ความเสี่ยง", "ผลกระทบ", "โอกาส", "แผนรองรับ", "สถานะ"], risks.map((x) => [x.code, x.data.title,
+        el("span", { class: `lvl-${x.data.impact}` }, LV[x.data.impact]), el("span", { class: `lvl-${x.data.likelihood}` }, LV[x.data.likelihood]), x.data.mitigation || "-", CRS[x.status] || x.status])));
+      fill("decisions", r.decisions.length ? el("ul", { class: "feed" }, r.decisions.map((d) => el("li", {}, el("time", {}, th(d.data.date)), el("span", {}, `${d.code} ${d.data.title}`)))) : empty("ยังไม่มี"));
+      fill("crTbl", table(["รหัส", "เรื่อง", "man-day", "สถานะ"], r.crs.map((x) => [x.code, x.data.notionUrl ? el("a", { href: x.data.notionUrl, target: "_blank", rel: "noopener" }, x.data.title) : x.data.title, x.data.manDays ?? "-", CRS[x.status] || x.status])));
+      fill("msTbl", table(["งวด", "ส่งมอบ", "มูลค่า", "module", "TOR"], r.milestones.map((m) => [m.name,
+        el("span", { style: m.daysLeft < 7 && m.status === "open" ? "color:var(--red);font-weight:600" : "" }, `${th(m.due)}${m.status === "open" ? ` (${m.daysLeft} วัน)` : ""}`),
+        m.valuePercent ? `${m.valuePercent}%` : "-", m.modulePercent === null ? "-" : `${m.modulePercent}%`,
+        el("div", { class: "chk" }, `${m.done}/${m.total}`, ...m.deliverables.filter((d) => d.status !== "done").map((d) => el("div", { style: d.status === "missing" ? "color:var(--amber)" : "" }, `${d.status === "missing" ? "○" : "◐"} ${d.name}${d.tor ? ` (TOR ${d.tor})` : ""}`)))])));
+      const b = r.budget;
+      if (!b) fill("budget", empty("-"));
+      else fill("budget",
+        ...(b.totalManDays ? bars([{ label: "ใช้ไป (md)", value: b.usedManDays }, { label: "งบ (md)", value: b.totalManDays }], (x) => x.label.startsWith("ใช้") ? "var(--accent)" : "#C9D3DF") : [el("p", { class: "note" }, "ยังไม่ได้ตั้งงบ พิมพ์ในแชต เช่น “งบ FDA 220 man-day”")]),
+        el("p", { class: "note" }, `ใช้ไป ${b.usedManDays} md${b.usedPercent !== null ? ` (${b.usedPercent}%)` : ""} · งานเสร็จ ${b.progressPercent}%${b.projectedOverrun > 0 ? ` · คาดว่าเกินงบ ${b.projectedOverrun} md` : ""}`),
+        ...(b.modules.length ? [table(["Module", "ใช้", "งบ"], b.modules.map((x) => [x.name, x.used, x.budget ?? "-"]))] : []),
+        el("span", { class: "note" }, b.basis));
+    } catch (e) {
+      fill("riskTbl", empty(`โหลดไม่สำเร็จ: ${e.message}`));
+    }
+  }
+
   for (const b of document.querySelectorAll("#range button")) b.addEventListener("click", () => {
     days = Number(b.dataset.d);
     for (const x of document.querySelectorAll("#range button")) x.setAttribute("aria-pressed", String(x === b));
@@ -261,11 +303,12 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
       $("error").style.display = "none";
-      if (!data.metrics) { $("title").textContent = "ยังไม่มีโปรเจกต์"; return; }
+      if (!data.metrics) { $("title").textContent = "ยังไม่มีโปรเจกต์ · เชื่อมระบบจัดการงานที่หน้าตั้งค่า"; return; }
       project = data.selected;
       history.replaceState(null, "", `?${new URLSearchParams({ t: token, project })}`);
       render(data);
       loadHistory();
+      loadRecords();
     } catch (e) {
       $("error").textContent = `โหลดข้อมูลไม่สำเร็จ: ${e.message}`;
       $("error").style.display = "block";

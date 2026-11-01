@@ -2,7 +2,9 @@
 // digest and the project_status tool. Numbers are computed here in code, never
 // by the model.
 import { config } from "./config.js";
-import type { PlaneClient, Project, State, Member, WorkItem, Cycle, Module, CycleLink, Label } from "./plane.js";
+import type { Project, State, Member, WorkItem, Cycle, Module, CycleLink, Label } from "./plane.js";
+import type { TaskProvider as PlaneClient } from "./providers/types.js";
+import { store } from "./store.js";
 
 const DAY = 86_400_000;
 
@@ -136,7 +138,7 @@ export async function projectMetrics(plane: PlaneClient, project: Project): Prom
   const weekStart = startOfWeek(today);
   const doneThisWeek = ctx.items.filter((i) => i.completedAt && dateStr(new Date(i.completedAt)) >= weekStart).length;
 
-  const staleCut = Date.now() - config.plane.staleDays * DAY;
+  const staleCut = Date.now() - store.get().prefs.staleDays * DAY;
   const stale = open
     .filter((i) => {
       const g = ctx.states.get(i.stateId)?.group;
@@ -160,7 +162,7 @@ export async function projectMetrics(plane: PlaneClient, project: Project): Prom
   const workload = [...load.entries()].map(([name, e]) => ({ name, ...e })).sort((a, b) => b.open - a.open);
 
   // bugs
-  const bugLabelIds = new Set(ctx.labels.filter((l) => l.name.toLowerCase() === config.plane.bugLabel.toLowerCase()).map((l) => l.id));
+  const bugLabelIds = new Set(ctx.labels.filter((l) => l.name.toLowerCase() === store.get().prefs.bugLabel.toLowerCase()).map((l) => l.id));
   const bugs = open.filter((i) => i.labelIds.some((l) => bugLabelIds.has(l)));
   const prios = ["urgent", "high", "medium", "low", "none"];
   const bugsByPriority = prios.map((p) => ({ priority: p, count: bugs.filter((b) => b.priority === p).length })).filter((b) => b.count > 0 || b.priority !== "none");
@@ -191,7 +193,7 @@ export async function projectMetrics(plane: PlaneClient, project: Project): Prom
   };
 }
 
-function startOfWeek(today: string): string {
+export function startOfWeek(today: string): string {
   const d = new Date(today + "T00:00:00Z");
   const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
   return new Date(d.getTime() - dow * DAY).toISOString().slice(0, 10);
@@ -204,9 +206,8 @@ export function currentCycle(cycles: Cycle[], today: string): Cycle | undefined 
   );
 }
 
-async function cycleMetrics(plane: PlaneClient, ctx: ProjectContext, today: string): Promise<ProjectMetrics["cycle"]> {
-  const cycles = await plane.cycles(ctx.project.id).catch(() => [] as Cycle[]);
-  const c = currentCycle(cycles, today);
+export async function cycleMetrics(plane: PlaneClient, ctx: ProjectContext, today: string, forCycle?: Cycle): Promise<ProjectMetrics["cycle"]> {
+  const c = forCycle ?? currentCycle(await plane.cycles(ctx.project.id).catch(() => [] as Cycle[]), today);
   if (!c || !c.start_date || !c.end_date) return null;
   const start = c.start_date.slice(0, 10);
   const end = c.end_date.slice(0, 10);

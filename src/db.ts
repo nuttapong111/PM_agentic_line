@@ -22,6 +22,15 @@ export async function migrate() {
     done_this_week int not null, unassigned int not null, urgent_bugs int not null,
     cycle_name text, cycle_percent int, cycle_total int, cycle_done int,
     metrics jsonb not null, primary key (day, project_id))`;
+  // Which workspace (data source) each row came from, so switching accounts keeps history apart.
+  await sql`alter table activity_log add column if not exists ws text`;
+  await sql`alter table metrics_daily add column if not exists ws text`;
+  // Risk log, decisions, change requests, milestones, reminders, budgets, effort: one table, kind + jsonb.
+  await sql`create table if not exists pm_records (
+    id bigserial primary key, ws text not null, kind text not null, code text, project_id text,
+    status text not null default 'open', data jsonb not null, due_at timestamptz,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now())`;
+  await sql`create index if not exists pm_records_kind on pm_records (ws, kind, status)`;
 }
 
 export async function loadState<T>(): Promise<T | null> {
@@ -47,9 +56,14 @@ export function saveState(value: unknown) {
   }).catch((e) => console.error("db: save state failed", e?.message ?? e));
 }
 
+let currentWs = "env";
+/** Set by the provider layer so new rows are tagged with the active workspace. */
+export function setWorkspace(ws: string) { currentWs = ws; }
+export const workspace = () => currentWs;
+
 export function logActivity(kind: string, summary: string, projectId: string | null, detail?: unknown) {
   if (!sql) return;
-  sql`insert into activity_log (kind, project_id, summary, detail) values (${kind}, ${projectId}, ${summary}, ${detail === undefined ? null : sql.json(JSON.parse(JSON.stringify(detail)))})`
+  sql`insert into activity_log (kind, project_id, summary, detail, ws) values (${kind}, ${projectId}, ${summary}, ${detail === undefined ? null : sql.json(JSON.parse(JSON.stringify(detail)))}, ${currentWs})`
     .catch((e) => console.error("db: activity log failed", e?.message ?? e));
 }
 
@@ -63,15 +77,15 @@ export async function snapshotMetrics(m: ProjectMetrics) {
   if (!sql) return;
   const c = m.cycle;
   await sql`insert into metrics_daily (day, project_id, project_name, open, overdue, blocked, stale, done_this_week, unassigned, urgent_bugs,
-      cycle_name, cycle_percent, cycle_total, cycle_done, metrics)
+      cycle_name, cycle_percent, cycle_total, cycle_done, metrics, ws)
     values (${m.today}, ${m.project.id}, ${m.project.name}, ${m.counts.open}, ${m.counts.overdue}, ${m.counts.blocked}, ${m.stale.length},
       ${m.counts.doneThisWeek}, ${m.counts.unassigned}, ${m.counts.urgentBugs},
-      ${c?.name ?? null}, ${c?.percent ?? null}, ${c?.total ?? null}, ${c?.done ?? null}, ${sql.json(JSON.parse(JSON.stringify(m)))})
+      ${c?.name ?? null}, ${c?.percent ?? null}, ${c?.total ?? null}, ${c?.done ?? null}, ${sql.json(JSON.parse(JSON.stringify(m)))}, ${currentWs})
     on conflict (day, project_id) do update set
       project_name = excluded.project_name, open = excluded.open, overdue = excluded.overdue, blocked = excluded.blocked,
       stale = excluded.stale, done_this_week = excluded.done_this_week, unassigned = excluded.unassigned,
       urgent_bugs = excluded.urgent_bugs, cycle_name = excluded.cycle_name, cycle_percent = excluded.cycle_percent,
-      cycle_total = excluded.cycle_total, cycle_done = excluded.cycle_done, metrics = excluded.metrics`;
+      cycle_total = excluded.cycle_total, cycle_done = excluded.cycle_done, metrics = excluded.metrics, ws = excluded.ws`;
 }
 
 export interface HistoryPoint {
@@ -93,4 +107,52 @@ export async function history(projectId: string, days: number) {
       sum(input_tokens)::int as input, sum(output_tokens)::int as output, sum(cache_read_tokens)::int as "cacheRead"
     from usage_log group by 1 order by 1 desc limit 6`;
   return { enabled: true, points, activity, usage };
+}
+
+/** Metrics point from about `daysAgo` days back (for week-over-week deltas). */
+export async function metricsAround(projectId: string, daysAgo: number): Promise<HistoryPoint | null> {
+  if (!sql) return null;
+  const [r] = await sql<HistoryPoint[]>`
+    select to_char(day, 'YYYY-MM-DD') as day, open, overdue, blocked, stale, done_this_week as "doneThisWeek",
+      unassigned, urgent_bugs as "urgentBugs", cycle_name as "cycleName", cycle_percent as "cyclePercent"
+    from metrics_daily where project_id = ${projectId} and day <= current_date - ${daysAgo}::int order by day desc limit 1`;
+  return r ?? null;
+}
+
+/** Row counts per workspace for the Settings > Data page. */
+export async function dataSummary() {
+  if (!sql) return [];
+  return sql<{ ws: string; since: string | null; points: number; activity: number; records: number; milestones: number }[]>`
+    with w as (
+      select ws from metrics_daily where ws is not null union select ws from activity_log where ws is not null union select ws from pm_records)
+    select w.ws,
+      (select to_char(min(day),'YYYY-MM-DD') from metrics_daily m where m.ws = w.ws) as since,
+      (select count(*)::int from metrics_daily m where m.ws = w.ws) as points,
+      (select count(*)::int from activity_log a where a.ws = w.ws) as activity,
+      (select count(*)::int from pm_records r where r.ws = w.ws and r.kind in ('risk','decision','cr')) as records,
+      (select count(*)::int from pm_records r where r.ws = w.ws and r.kind = 'milestone') as milestones
+    from w order by 1`;
+}
+
+export async function exportWorkspace(ws: string) {
+  if (!sql) return { metrics: [], activity: [], records: [] };
+  const [metrics, activity, records] = await Promise.all([
+    sql`select to_char(day,'YYYY-MM-DD') as day, project_id, project_name, open, overdue, blocked, stale, done_this_week, unassigned, urgent_bugs, cycle_name, cycle_percent from metrics_daily where ws = ${ws} order by day`,
+    sql`select at, kind, project_id, summary from activity_log where ws = ${ws} order by at`,
+    sql`select id, kind, code, project_id, status, data, due_at, created_at, updated_at from pm_records where ws = ${ws} order by id`,
+  ]);
+  return { metrics, activity, records };
+}
+
+export async function deleteWorkspace(ws: string | null) {
+  if (!sql) return;
+  if (ws === null) {
+    await sql`truncate metrics_daily, activity_log, usage_log, pm_records`;
+    await sql`delete from app_state`;
+    await sql`drop table if exists bt_comments, bt_items, bt_projects`;
+    return;
+  }
+  await sql`delete from metrics_daily where ws = ${ws}`;
+  await sql`delete from activity_log where ws = ${ws}`;
+  await sql`delete from pm_records where ws = ${ws}`;
 }

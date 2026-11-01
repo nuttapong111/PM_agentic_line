@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/selftest.ts",
+    "test": "tsx scripts/selftest.ts && tsx scripts/selftest-features.ts",
     "richmenu": "tsx scripts/setup-richmenu.ts",
     "build:function": "tsx scripts/build-function.ts"
   },

@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ตั้งค่า · PM Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --accent:#2448C8; --accent-d:#1A3496; --ink:#18202B; --muted:#5A6573; --line:#E6EAF0; --field:#C9D3DF; --bg:#F3F5F8; --red:#A2231B; --amber:#8A4300; --green:#1B6B34; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans Thai',sans-serif; font-size:14px; }
+  a { color:var(--accent); } a:hover { color:var(--accent-d); }
+  header { background:#1E2A3A; color:#fff; padding:12px 20px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .logo { display:flex; align-items:center; gap:10px; } .logo i { width:32px; height:32px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; }
+  header nav { display:flex; gap:6px; }
+  header nav a { height:34px; padding:0 14px; border-radius:999px; border:1px solid #4A5A70; color:#DCE4EE; font-weight:600; text-decoration:none; display:flex; align-items:center; }
+  header nav a[aria-current] { background:#fff; color:var(--ink); border-color:#fff; }
+  main { max-width:1180px; margin:0 auto; padding:28px 24px; display:flex; gap:28px; align-items:flex-start; }
+  .side { flex:0 0 220px; display:flex; flex-direction:column; gap:2px; position:sticky; top:16px; }
+  .side a { height:40px; padding:0 12px; border-radius:8px; display:flex; align-items:center; font-weight:600; text-decoration:none; color:#3D4855; }
+  .side a[aria-current] { background:#E8EDFC; color:var(--accent-d); }
+  .content { flex:1; min-width:0; display:flex; flex-direction:column; gap:16px; }
+  h1 { margin:0; font-size:24px; } h2 { margin:0; font-size:16px; } h3 { margin:0; font-size:15px; }
+  .lead { color:#4A5568; margin-top:4px; }
+  section.card { background:#fff; border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
+  .between { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .conn { display:flex; gap:14px; align-items:flex-start; }
+  .badge { flex:0 0 44px; height:44px; border-radius:10px; color:#fff; font-weight:700; font-size:18px; display:flex; align-items:center; justify-content:center; }
+  .grow { flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; }
+  .status { font-weight:600; font-size:13px; } .ok { color:var(--green); } .off { color:var(--muted); } .bad { color:var(--red); }
+  dl { display:grid; grid-template-columns:140px 1fr; gap:6px 14px; margin:0; }
+  dt { color:var(--muted); } dd { margin:0; font-weight:600; overflow-wrap:anywhere; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; }
+  button, .btn { height:38px; padding:0 14px; border-radius:10px; border:1px solid var(--field); background:#fff; color:var(--ink); font:600 14px 'IBM Plex Sans Thai',sans-serif; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; }
+  button.primary, .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--red); border-color:#E7B4AF; }
+  button.danger.solid { background:var(--red); border-color:var(--red); color:#fff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-weight:600; font-size:13px; color:#3D4855; }
+  input[type=text], input[type=password], input[type=time], input[type=number], input[type=email], select, textarea { height:38px; border:1px solid var(--field); border-radius:8px; padding:0 10px; font:14px 'IBM Plex Sans Thai',sans-serif; color:var(--ink); background:#fff; width:100%; }
+  textarea { height:auto; padding:8px 10px; min-height:60px; }
+  .hint { font-size:12px; color:var(--muted); font-weight:400; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .panel { border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:12px; background:#FAFBFD; }
+  .msg { padding:10px 12px; border-radius:8px; font-size:13px; }
+  .msg.ok { background:#E7F4EC; color:var(--green); } .msg.bad { background:#FDECEA; color:var(--red); } .msg.info { background:#EEF2FD; color:#2A3A7A; }
+  .checks { display:flex; flex-direction:column; gap:6px; }
+  .checks label { display:flex; gap:8px; align-items:center; font-weight:500; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > * { flex:1; }
+  .row > button { flex:0 0 auto; }
+  table { width:100%; border-collapse:collapse; } th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); } th { color:var(--muted); font-size:12px; font-weight:600; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; }
+  .stats div { background:#F4F6F9; border-radius:8px; padding:8px 10px; } .stats b { font-size:20px; display:block; font-variant-numeric:tabular-nums; }
+  .pill { font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; background:#E7F4EC; color:var(--green); }
+  .hidden { display:none !important; }
+  code { background:#F1F3F7; padding:1px 5px; border-radius:4px; font-size:12px; overflow-wrap:anywhere; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1E2A3A; color:#fff; padding:10px 16px; border-radius:10px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+  @media (max-width: 760px) {
+    main { flex-direction:column; padding:16px; gap:12px; }
+    .side { position:static; flex-direction:row; overflow-x:auto; flex:0 0 auto; width:100%; }
+    .side a { white-space:nowrap; }
+    dl { grid-template-columns:110px 1fr; }
+    .conn .badge { display:none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></i><strong>PM Assistant</strong></div>
+  <nav><a id="toDash" href="#">Dashboard</a><a href="#" aria-current="page">ตั้งค่า</a></nav>
+</header>
+<main>
+  <nav class="side" aria-label="หมวดการตั้งค่า">
+    <a href="#connections">การเชื่อมต่อ</a>
+    <a href="#projects">โปรเจกต์ที่ติดตาม</a>
+    <a href="#team">ทีมและชื่อเล่น</a>
+    <a href="#notify">การแจ้งเตือน</a>
+    <a href="#data">ข้อมูลและความเป็นส่วนตัว</a>
+  </nav>
+  <div class="content" id="view"><p>กำลังโหลด…</p></div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+const T = new URLSearchParams(location.search).get("t") || "";
+document.getElementById("toDash").href = "/dashboard?t=" + encodeURIComponent(T);
+let S = null; // last /api/settings snapshot
+let switching = null; // Plane switch-account form state
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const DAYS = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+const fmtTime = (ms) => ms ? new Date(ms).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-";
+const wsLabel = (ws) => ws === "builtin" ? "ระบบในตัวบอท" : ws.replace(/^plane:/, "").replace(/^[^/]+\//, (h) => h);
+
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove("show"), 2600); }
+
+async function api(path, body, method) {
+  const r = await fetch(path, { method: method || (body ? "POST" : "GET"), headers: { "x-token": T, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+async function load() { S = await api("/api/settings"); render(); }
+
+function section() { return (location.hash || "#connections").slice(1); }
+
+function render() {
+  const sec = section();
+  document.querySelectorAll(".side a").forEach((a) => a.toggleAttribute("aria-current", a.getAttribute("href") === "#" + sec));
+  const v = $("#view");
+  v.innerHTML = ({ connections, projects, team, notify, data }[sec] || connections)();
+  bind(sec);
+}
+
+// ------------------------------------------------------------------ การเชื่อมต่อ
+function connections() {
+  const t = S.task, pl = t.plane;
+  const sel = switching ? "plane" : t.provider === "builtin" ? "builtin" : t.provider === "none" ? "none" : "plane";
+  const planeOk = t.active === "plane";
+  let planeBody;
+  if (switching) planeBody = switchForm();
+  else if (pl) planeBody = `
+    <div class="status ${planeOk ? (pl.ok === false ? "bad" : "ok") : "off"}">${planeOk ? (pl.ok === false ? "● เชื่อมไม่ได้" : "● เชื่อมแล้ว") : "ไม่ได้ใช้งาน"}${pl.checkedAt ? ` <span class="hint">ตรวจล่าสุด ${fmtTime(pl.checkedAt)}</span>` : ""}${pl.fromEnv ? ' <span class="hint">· ค่าจาก Railway Variables</span>' : ""}</div>
+    <dl>${pl.account ? `<dt>เชื่อมในชื่อ</dt><dd>${esc(pl.account.name)}${pl.account.email ? ` <span class="hint">${esc(pl.account.email)}</span>` : ""}</dd>` : ""}
+      <dt>Server</dt><dd>${esc(pl.host)}</dd><dt>Workspace</dt><dd>${esc(pl.workspace)}</dd><dt>API token</dt><dd>•••• •••• ${esc(pl.tokenLast4)}</dd></dl>
+    <div class="btns"><button data-act="plane-check">ทดสอบการเชื่อม</button><button data-act="plane-switch" class="primary">เปลี่ยนบัญชี / token</button>${planeOk ? '<button data-act="plane-off" class="danger">ยกเลิกการเชื่อม</button>' : '<button data-act="plane-on">ใช้ Plane</button>'}</div>`;
+  else planeBody = `<div class="status off">ยังไม่เชื่อม</div><div class="btns"><button class="primary" data-act="plane-switch">เชื่อม Plane</button></div>`;
+
+  const builtinBody = `
+    <div class="status ${t.active === "builtin" ? "ok" : "off"}">${t.active === "builtin" ? "● ใช้งานอยู่" : "ไม่ได้ใช้งาน"}</div>
+    <p class="hint" style="margin:0">เก็บงานในฐานข้อมูลของบอทเอง ใช้ตอนที่บริษัทไม่มีระบบจัดการงาน หรือระหว่างย้ายระบบ (สถานะ: Todo, In Progress, Blocked, Done)</p>
+    ${!S.db ? '<div class="msg bad">ต้องมีฐานข้อมูล PostgreSQL</div>' : t.active === "builtin" ? `
+      <div class="row"><input type="text" id="bName" placeholder="ชื่อโปรเจกต์ เช่น ERP Rollout" aria-label="ชื่อโปรเจกต์"><input type="text" id="bIdent" placeholder="รหัส เช่น ERP" aria-label="รหัสโปรเจกต์" style="max-width:140px"><button data-act="builtin-add" class="primary">เพิ่มโปรเจกต์</button></div>
+      ${S.projects.length ? `<div class="hint">โปรเจกต์: ${S.projects.map((p) => esc(p.name + " (" + p.identifier + ")")).join(", ")}</div>` : ""}`
+      : '<div class="btns"><button data-act="builtin-on">ใช้ระบบในตัวบอท</button></div>'}`;
+
+  const c = S.claude;
+  const g = S.google, n = S.notion;
+  return `
+  <div><h1>การเชื่อมต่อ</h1><div class="lead">ค่าทั้งหมดเก็บแบบเข้ารหัสในฐานข้อมูลของบอท กดบันทึกแล้วมีผลทันที ไม่ต้องแก้ env</div></div>
+
+  <section class="card" aria-labelledby="h-task">
+    <div class="between"><h2 id="h-task">ระบบจัดการงาน</h2>
+      <label class="row" style="gap:8px;font-size:13px;color:#4A5568">เครื่องมือ
+        <select id="provSel" style="width:auto"><option value="plane" ${sel === "plane" ? "selected" : ""}>Plane</option><option disabled>Jira (เร็ว ๆ นี้)</option><option disabled>ClickUp (เร็ว ๆ นี้)</option><option disabled>Linear (เร็ว ๆ นี้)</option><option value="builtin" ${sel === "builtin" ? "selected" : ""}>ระบบในตัวบอท</option><option value="none" ${sel === "none" ? "selected" : ""}>ไม่เชื่อม</option></select></label></div>
+    <div class="conn ${sel === "plane" ? "" : "hidden"}" id="planeBox"><div class="badge" style="background:#3F76FF">P</div><div class="grow"><h3>Plane</h3>${planeBody}</div></div>
+    <div class="conn ${sel === "builtin" ? "" : "hidden"}" id="builtinBox"><div class="badge" style="background:#5A6573">B</div><div class="grow"><h3>ระบบในตัวบอท</h3>${builtinBody}</div></div>
+    ${sel === "none" ? '<div class="msg info">ไม่ได้เชื่อมระบบจัดการงาน บอทยังตอบคำถามทั่วไป นัดประชุม และค้น Notion ได้</div>' : ""}
+  </section>
+
+  <section class="card" aria-labelledby="h-ai">
+    <h2 id="h-ai">AI</h2>
+    <div class="conn"><div class="badge" style="background:#C2653C">C</div><div class="grow"><h3>Claude API</h3>
+      <div class="status ${c.source === "none" ? "bad" : "ok"}">${c.source === "none" ? "● ยังไม่มี API key" : "● เชื่อมแล้ว"}</div>
+      <dl><dt>โมเดล</dt><dd>${esc(modelName(S.model))}</dd>${c.last4 ? `<dt>API key</dt><dd>sk-ant-•••• ${esc(c.last4)}</dd>` : ""}<dt>ใช้เดือนนี้</dt><dd>${S.calls ?? "-"} ครั้ง</dd><dt>ที่มา</dt><dd>${c.source === "settings" ? "ใส่จากหน้านี้" : c.source === "env" ? "Railway Variables (ANTHROPIC_API_KEY)" : "-"}</dd></dl>
+      <div class="row"><input type="password" id="claudeKey" placeholder="วาง API key ใหม่ (sk-ant-...)" autocomplete="off" aria-label="Claude API key"><button data-act="claude-save" class="primary">ทดสอบและบันทึก</button></div>
+      <div class="btns">${c.source !== "none" ? '<button data-act="claude-test">ทดสอบ</button>' : ""}${c.source === "settings" ? '<button data-act="claude-remove" class="danger">ลบ key ที่ใส่จากหน้านี้</button>' : ""}</div>
+    </div></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-other">
+    <h2 id="h-other">บริการอื่น</h2>
+    <div class="conn"><div class="badge" style="background:#1A73E8">G</div><div class="grow"><h3>Google Workspace</h3>
+      <div class="status ${g?.connected ? "ok" : "off"}">${g?.connected ? "● เชื่อมแล้ว" : "ยังไม่เชื่อม"}</div>
+      <div class="hint">Gmail · Calendar · Meet ล็อกอินด้วยอีเมลบริษัท (ไม่ต้องตรงกับอีเมลที่ใช้กับ Claude)</div>
+      ${g?.connected ? `<dl><dt>เชื่อมในชื่อ</dt><dd>${esc(g.email || "-")}</dd><dt>ตั้งแต่</dt><dd>${fmtTime(g.connectedAt)}</dd></dl>
+        <div class="btns"><button data-act="google-reauth" class="primary">เปลี่ยนบัญชี</button><button data-act="google-remove" class="danger">ยกเลิกการเชื่อม</button></div>` : `
+        <details ${g?.clientId ? "" : "open"}><summary style="cursor:pointer;font-weight:600">ขั้นตอนครั้งแรก (5 นาที)</summary>
+          <ol class="hint" style="line-height:1.8">
+            <li>เปิด <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console › Credentials</a> ด้วยอีเมลบริษัท</li>
+            <li>เปิดใช้ <b>Google Calendar API</b> และ <b>Gmail API</b> (APIs &amp; Services › Library)</li>
+            <li>OAuth consent screen เลือก <b>Internal</b> (ถ้าบริษัทใช้ Workspace)</li>
+            <li>Create credentials › OAuth client ID › Web application › Authorized redirect URI ใส่<br><code>${esc(S.googleRedirectUri)}</code></li>
+            <li>คัดลอก Client ID และ Client secret มาวางด้านล่าง</li>
+          </ol></details>
+        <div class="grid2"><label class="f">Client ID<input type="text" id="gId" value="${esc(g?.clientId || "")}" autocomplete="off"></label>
+          <label class="f">Client secret<input type="password" id="gSecret" placeholder="${g?.hasSecret ? "บันทึกไว้แล้ว เว้นได้" : ""}" autocomplete="off"></label></div>
+        <div class="btns"><button data-act="google-connect" class="primary">เชื่อมด้วย Google</button></div>`}
+    </div></div>
+    <div class="conn"><div class="badge" style="background:#18202B">N</div><div class="grow"><h3>Notion</h3>
+      <div class="status ${n ? "ok" : "off"}">${n ? "● เชื่อมแล้ว" : "ยังไม่เชื่อม"}</div>
+      <div class="hint">อ่านจดประชุม ค้นข้อตกลง บันทึก retro และเอกสาร CR</div>
+      ${n ? `<dl><dt>Integration</dt><dd>${esc(n.botName || "-")}</dd><dt>Token</dt><dd>•••• ${esc(n.last4)}</dd></dl>` : `<ol class="hint" style="line-height:1.8"><li>เปิด <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noopener">notion.so › Integrations</a> › New integration (Internal)</li><li>คัดลอก Internal integration secret มาวาง</li><li>ในหน้า Notion ที่ต้องการให้บอทอ่าน กด ••• › Connections › เพิ่ม integration นี้</li></ol>`}
+      <div class="row"><input type="password" id="nToken" placeholder="${n ? "วาง token ใหม่เพื่อเปลี่ยน" : "ntn_... หรือ secret_..."}" autocomplete="off" aria-label="Notion token"><button data-act="notion-save" class="primary">${n ? "เปลี่ยน token" : "เชื่อม Notion"}</button></div>
+      ${n ? '<div class="btns"><button data-act="notion-remove" class="danger">ยกเลิกการเชื่อม</button></div>' : ""}
+    </div></div>
+    <div class="conn"><div class="badge" style="background:#06C755">L</div><div class="grow"><h3>LINE Official Account</h3>
+      <div class="status ${S.line.ownerSet ? "ok" : "bad"}">${S.line.ownerSet ? "● เชื่อมแล้ว" : "● ยังไม่ได้ตั้ง OWNER_LINE_USER_ID"}</div>
+      <div class="hint">ตั้งค่าใน Railway เพราะบอทต้องใช้ตอนเริ่มระบบ · ผู้ใช้ 1 คน (คุณ)</div>
+    </div></div>
+  </section>`;
+}
+
+function modelName(id) { return /haiku-5-5/.test(id) ? "Claude Haiku 5.5" : id; }
+
+function switchForm() {
+  const f = switching;
+  return `<div class="panel" role="group" aria-labelledby="h-switch">
+    <div><h3 id="h-switch">เปลี่ยนบัญชี Plane</h3><div class="hint">กรอกแล้วกดทดสอบก่อนบันทึก</div></div>
+    <div class="grid2">
+      <label class="f">Server URL<input type="text" id="sUrl" value="${esc(f.baseUrl)}" placeholder="https://plane.company.com"></label>
+      <label class="f">Workspace slug<input type="text" id="sWs" value="${esc(f.workspace)}" placeholder="เช่น promes"></label>
+    </div>
+    <label class="f">API token<input type="password" id="sTok" value="${esc(f.token)}" autocomplete="off" placeholder="${f.canReuse ? "เว้นไว้ = ใช้ token เดิม" : "plane_api_..."}"><span class="hint">สร้างได้ที่ Plane › Profile settings › Personal access tokens · เปลี่ยน Server ต้องใส่ token ใหม่ทุกครั้ง</span></label>
+    ${f.error ? `<div class="msg bad">${esc(f.error)}</div>` : ""}
+    ${f.result ? `<div class="msg ok">✓ เชื่อมได้ในชื่อ ${esc(f.result.account.email || f.result.account.name)}</div>
+      <div><div class="hint" style="margin-bottom:6px">พบ ${f.result.projects.length} โปรเจกต์ · เลือกโปรเจกต์ที่จะให้บอทติดตาม</div>
+      <div class="checks">${f.result.projects.map((p) => `<label><input type="checkbox" name="sp" value="${esc(p.identifier)}" ${f.picked.includes(p.identifier) ? "checked" : ""}> ${esc(p.name)} <span class="hint">${esc(p.identifier)}</span></label>`).join("")}</div></div>
+      ${f.changedHost ? '<div class="msg info">ประวัติ Dashboard, risk log และ CR ของ workspace เดิมจะถูกเก็บแยกไว้ ไม่ปนกับที่ใหม่ ลบได้ที่ “ข้อมูลและความเป็นส่วนตัว”</div>' : ""}` : ""}
+    <div class="btns"><button data-act="switch-cancel">ยกเลิก</button><button data-act="switch-test">${f.result ? "ทดสอบอีกครั้ง" : "ทดสอบการเชื่อม"}</button><button data-act="switch-save" class="primary" ${f.result ? "" : "disabled"}>บันทึกและเปลี่ยนบัญชี</button></div>
+  </div>`;
+}
+
+function readSwitch() {
+  const f = switching;
+  f.baseUrl = $("#sUrl").value.trim(); f.workspace = $("#sWs").value.trim(); f.token = $("#sTok").value.trim();
+  f.picked = [...document.querySelectorAll('input[name=sp]:checked')].map((x) => x.value);
+  const pl = S.task.plane;
+  const norm = (u) => u.replace(/\/+$/, "").replace(/^(?!https?:\/\/)/, "https://");
+  f.changedHost = !pl || norm(f.baseUrl) !== norm(pl.baseUrl) || f.workspace !== pl.workspace;
+  f.canReuse = !f.changedHost;
+}
+
+// ------------------------------------------------------------------ โปรเจกต์ที่ติดตาม
+function projects() {
+  if (S.task.active === "none") return `<div><h1>โปรเจกต์ที่ติดตาม</h1></div><section class="card"><div class="msg info">ยังไม่ได้เชื่อมระบบจัดการงาน <a href="#connections">ไปที่การเชื่อมต่อ</a></div></section>`;
+  const builtin = S.task.active === "builtin";
+  return `<div><h1>โปรเจกต์ที่ติดตาม</h1><div class="lead">บอทสรุป แจ้งเตือน และคำนวณ Dashboard เฉพาะโปรเจกต์ที่เลือก${builtin ? " (ระบบในตัวติดตามทุกโปรเจกต์)" : ""}</div></div>
+  <section class="card"><div class="checks">${S.projects.map((p) => `<label><input type="checkbox" name="fp" value="${esc(p.identifier)}" ${p.followed ? "checked" : ""} ${builtin ? "disabled" : ""}> ${esc(p.name)} <span class="hint">${esc(p.identifier)}</span></label>`).join("") || '<span class="hint">ไม่พบโปรเจกต์</span>'}</div>
+  ${builtin ? "" : '<div class="hint">ไม่เลือกเลย = ติดตามทุกโปรเจกต์</div><div class="btns"><button class="primary" data-act="projects-save">บันทึก</button></div>'}</section>`;
+}
+
+// ------------------------------------------------------------------ ทีมและชื่อเล่น
+function team() {
+  const nick = Object.entries(S.prefs.nicknames || {});
+  const opts = S.members.map((m) => `<option value="${esc(m.email || m.name)}">${esc(m.name)}${m.email ? " · " + esc(m.email) : ""}</option>`).join("");
+  return `<div><h1>ทีมและชื่อเล่น</h1><div class="lead">จับคู่ชื่อเล่นที่พิมพ์ในแชตกับสมาชิกในระบบจัดการงาน ใช้อีเมลจะดีที่สุด เพราะใช้ส่ง invite และอีเมลได้ด้วย</div></div>
+  <section class="card"><datalist id="mem">${opts}</datalist>
+    <table><thead><tr><th style="width:30%">ชื่อเล่น</th><th>สมาชิก (อีเมลหรือชื่อ)</th><th style="width:60px"></th></tr></thead>
+    <tbody id="nickRows">${nick.map(([a, b]) => nickRow(a, b)).join("")}</tbody></table>
+    <div class="btns"><button data-act="nick-add">เพิ่มชื่อเล่น</button><button class="primary" data-act="nick-save">บันทึก</button></div>
+  </section>
+  <section class="card"><h2>การคำนวณ</h2><div class="grid2">
+    <label class="f">งานค้างนานเมื่อไม่ขยับเกิน (วัน)<input type="number" id="pStale" min="1" max="60" value="${S.prefs.staleDays}"></label>
+    <label class="f">ชื่อ label ของ bug<input type="text" id="pBug" value="${esc(S.prefs.bugLabel)}"></label>
+    <label class="f">ชั่วโมงต่อ 1 man-day<input type="number" id="pMd" min="1" max="24" value="${S.prefs.manDayHours}"></label>
+  </div><div class="btns"><button class="primary" data-act="calc-save">บันทึก</button></div></section>`;
+}
+const nickRow = (a = "", b = "") => `<tr><td><input type="text" class="nk" value="${esc(a)}" aria-label="ชื่อเล่น" placeholder="ต้น"></td><td><input type="text" class="nv" list="mem" value="${esc(b)}" aria-label="สมาชิก" placeholder="ton@company.com"></td><td><button class="danger" data-act="nick-del" aria-label="ลบแถว">ลบ</button></td></tr>`;
+
+// ------------------------------------------------------------------ การแจ้งเตือน
+function notify() {
+  const p = S.prefs, w = p.weekly, n = p.nudge;
+  const daySel = (id, v) => `<select id="${id}">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<option value="${d}" ${d === v ? "selected" : ""}>${DAYS[d]}</option>`).join("")}</select>`;
+  return `<div><h1>การแจ้งเตือน</h1><div class="lead">ทุกอย่างที่บอทส่งเองใน LINE (นับโควตาข้อความ push ของ LINE OA)</div></div>
+  <section class="card"><h2>สรุปตอนเช้าและช่วงเงียบ</h2><div class="grid2">
+    <label class="f">เวลาสรุปตอนเช้า<input type="time" id="nDigest" value="${p.digestTime}"></label>
+    <label class="f">ส่งเฉพาะวันทำการ<select id="nWork"><option value="1" ${p.workdaysOnly ? "selected" : ""}>ใช่ (จ.–ศ.)</option><option value="0" ${!p.workdaysOnly ? "selected" : ""}>ทุกวัน</option></select></label>
+    <label class="f">ห้ามรบกวนตั้งแต่<input type="time" id="nQf" value="${p.quietFrom}"></label>
+    <label class="f">ถึง<input type="time" id="nQt" value="${p.quietTo}"></label>
+  </div><div class="hint">ช่วงห้ามรบกวนไม่ส่งการแจ้งเตือนอัตโนมัติ ยกเว้นการเตือนความจำที่คุณตั้งเอง</div></section>
+  <section class="card"><h2>ประชุมและกำหนดส่ง</h2><div class="grid2">
+    <label class="f">สรุปก่อนประชุม (นาที, 0 = ปิด)<input type="number" id="nPrep" min="0" max="120" value="${p.meetingPrepMinutes}"></label>
+    <label class="f">เตือนงวดงานล่วงหน้า (วัน)<input type="text" id="nMs" value="${(p.milestoneAlertDays || []).join(", ")}"><span class="hint">เช่น 14, 7, 3</span></label>
+    <label class="f">ปฏิทินวันลา (Calendar ID)<input type="text" id="nLeave" value="${esc(p.leaveCalendarId)}" placeholder="xxxx@group.calendar.google.com"><span class="hint">ใช้คำนวณกำลังคน ชื่อเหตุการณ์ควรมีชื่อหรืออีเมลคนลา</span></label>
+    <label class="f">หน้า Notion สำหรับเก็บเอกสาร<input type="text" id="nNotion" value="${esc(p.notionParentPageId)}" placeholder="ลิงก์หรือ id ของหน้า"><span class="hint">retro และเอกสาร CR จะสร้างใต้หน้านี้</span></label>
+  </div></section>
+  <section class="card"><h2>ทวงอัปเดตงานค้าง</h2><div class="grid2">
+    <label class="f">เปิดใช้<select id="nuOn"><option value="1" ${n.enabled ? "selected" : ""}>เปิด</option><option value="0" ${!n.enabled ? "selected" : ""}>ปิด</option></select></label>
+    <label class="f">วัน${daySel("nuDay", n.day)}</label>
+    <label class="f">เวลา<input type="time" id="nuTime" value="${n.time}"></label>
+  </div><div class="hint">บอทส่งการ์ดรายการงานที่นิ่งนานให้คุณกดยืนยันก่อนคอมเมนต์ทวงทุกครั้ง</div></section>
+  <section class="card"><h2>รายงานประจำสัปดาห์</h2><div class="grid2">
+    <label class="f">เปิดใช้<select id="wOn"><option value="1" ${w.enabled ? "selected" : ""}>เปิด</option><option value="0" ${!w.enabled ? "selected" : ""}>ปิด</option></select></label>
+    <label class="f">วัน${daySel("wDay", w.day)}</label>
+    <label class="f">เวลา<input type="time" id="wTime" value="${w.time}"></label>
+  </div><div class="grid2">
+    <label class="f">ถึง<textarea id="wTo" placeholder="boss@company.com, pmo@company.com">${esc(w.to.join(", "))}</textarea></label>
+    <label class="f">สำเนา<textarea id="wCc">${esc(w.cc.join(", "))}</textarea></label>
+  </div><div class="hint">บอทร่างรายงานแล้วส่งการ์ดให้ตรวจ จะส่งอีเมลจาก Gmail ของคุณเมื่อกดส่งเท่านั้น</div>
+  <div class="btns"><button class="primary" data-act="notify-save">บันทึกการแจ้งเตือน</button></div></section>`;
+}
+
+// ------------------------------------------------------------------ ข้อมูล
+function data() {
+  const list = S.data.workspaces;
+  const cur = S.data.current;
+  if (!list.some((w) => w.ws === cur)) list.unshift({ ws: cur, since: null, points: 0, activity: 0, records: 0, milestones: 0 });
+  return `<div><h1>ข้อมูลและความเป็นส่วนตัว</h1><div class="lead">ข้อมูลงานจริงยังอยู่ในระบบจัดการงาน หน้านี้จัดการเฉพาะสิ่งที่บอทเก็บเพิ่ม</div></div>
+  ${!S.db ? '<section class="card"><div class="msg info">ไม่ได้ใช้ฐานข้อมูล บอทเก็บเฉพาะค่าตั้งค่าและแชตล่าสุด</div></section>' : ""}
+  <section class="card"><h2>ข้อมูลที่บอทเก็บ แยกตาม workspace</h2>
+  ${list.map((w) => `<div class="panel">
+    <div class="between"><div><h3>${esc(wsLabel(w.ws))}</h3><div class="hint">${w.since ? "ตั้งแต่ " + new Date(w.since).toLocaleDateString("th-TH", { dateStyle: "medium" }) : ""}</div></div>${w.ws === cur ? '<span class="pill">ใช้งานอยู่</span>' : ""}</div>
+    <div class="stats"><div><b>${w.points}</b>จุดประวัติรายวัน</div><div><b>${w.activity}</b>log การทำงาน</div><div><b>${w.records}</b>ความเสี่ยง / CR</div><div><b>${w.milestones}</b>งวดงาน</div></div>
+    <div class="btns"><a class="btn" href="/api/settings/export?t=${encodeURIComponent(T)}&ws=${encodeURIComponent(w.ws)}">ส่งออก JSON</a>
+      <a class="btn" href="/api/settings/export?t=${encodeURIComponent(T)}&ws=${encodeURIComponent(w.ws)}&table=records">Excel: risk/CR/งวด</a>
+      <a class="btn" href="/api/settings/export?t=${encodeURIComponent(T)}&ws=${encodeURIComponent(w.ws)}&table=metrics">Excel: ประวัติรายวัน</a>
+      <button class="danger" data-act="ws-delete" data-ws="${esc(w.ws)}">ลบข้อมูล workspace นี้</button></div>
+  </div>`).join("")}
+  </section>
+  <section class="card" style="border:1px solid #E7B4AF"><h2 style="color:var(--red)">ลบข้อมูลทั้งหมด</h2>
+    <div class="hint" style="font-size:13px">ใช้ตอนย้ายบริษัท: ลบประวัติ, log, risk, CR, ค่าการเชื่อมต่อ และประวัติแชตทั้งหมด ย้อนกลับไม่ได้ ควรส่งออกเก็บไว้ก่อนถ้าบริษัทเดิมต้องการ</div>
+    <label class="f"><span>พิมพ์ <b>ลบทั้งหมด</b> เพื่อยืนยัน</span><input type="text" id="delConfirm" autocomplete="off"></label>
+    <div class="btns"><button class="danger solid" data-act="wipe" id="wipeBtn" disabled>ลบข้อมูลทั้งหมด</button></div>
+  </section>`;
+}
+
+// ------------------------------------------------------------------ actions
+async function run(btn, fn) {
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = "กำลังทำ…";
+  try { await fn(); } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = old; }
+}
+
+function bind(sec) {
+  if (sec === "connections") {
+    const sel = $("#provSel");
+    sel?.addEventListener("change", async () => {
+      if (sel.value === "plane") { if (!S.task.plane) switching = blankSwitch(); else if (S.task.active !== "plane") await savePlaneAgain(); render(); return; }
+      const msg = sel.value === "none" ? "ยกเลิกการเชื่อมระบบจัดการงาน?" : "เปลี่ยนไปใช้ระบบในตัวบอท? ข้อมูลใน Plane ยังอยู่ที่เดิม";
+      if (!confirm(msg)) { render(); return; }
+      try { await api("/api/settings/provider", { provider: sel.value }); toast("บันทึกแล้ว"); await load(); } catch (e) { toast(e.message); render(); }
+    });
+  }
+  if (sec === "data") {
+    const inp = $("#delConfirm");
+    inp?.addEventListener("input", () => ($("#wipeBtn").disabled = inp.value.trim() !== "ลบทั้งหมด"));
+  }
+}
+
+const blankSwitch = () => ({ baseUrl: S.task.plane?.baseUrl || "", workspace: S.task.plane?.workspace || "", token: "", result: null, error: "", picked: [], canReuse: !!S.task.plane, changedHost: false });
+
+async function savePlaneAgain() {
+  const pl = S.task.plane;
+  try { await api("/api/settings/plane/save", { baseUrl: pl.baseUrl, workspace: pl.workspace, projects: S.projects.filter((p) => p.followed).map((p) => p.identifier) }); toast("กลับมาใช้ Plane แล้ว"); await load(); }
+  catch (e) { switching = blankSwitch(); switching.error = e.message; }
+}
+
+document.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const A = {
+    "plane-check": async () => { const r = await api("/api/settings/plane/check", {}); toast("ใช้งานได้ · " + r.account); await load(); },
+    "plane-switch": async () => { switching = blankSwitch(); render(); $("#sUrl").focus(); },
+    "plane-off": async () => { if (!confirm("ยกเลิกการเชื่อม Plane? บอทจะหยุดอ่านและเขียนงาน")) return; await api("/api/settings/provider", { provider: "none" }); await load(); },
+    "plane-on": async () => { await savePlaneAgain(); render(); },
+    "switch-cancel": async () => { switching = null; render(); },
+    "switch-test": async () => {
+      readSwitch();
+      const f = switching;
+      f.error = ""; f.result = null;
+      if (f.changedHost && !f.token) { f.error = "เปลี่ยน Server หรือ Workspace ต้องใส่ API token ใหม่"; render(); return; }
+      try {
+        f.result = await api("/api/settings/plane/test", { baseUrl: f.baseUrl, workspace: f.workspace, token: f.token || undefined });
+        if (!f.picked.length) f.picked = f.result.projects.map((p) => p.identifier);
+      } catch (e) { f.error = e.message; }
+      render();
+    },
+    "switch-save": async () => {
+      readSwitch();
+      const f = switching;
+      await api("/api/settings/plane/save", { baseUrl: f.baseUrl, workspace: f.workspace, token: f.token || undefined, projects: f.picked });
+      switching = null; toast("เปลี่ยนบัญชีแล้ว"); await load();
+    },
+    "builtin-on": async () => { await api("/api/settings/provider", { provider: "builtin" }); await load(); },
+    "builtin-add": async () => { await api("/api/settings/builtin/project", { name: $("#bName").value, identifier: $("#bIdent").value }); toast("เพิ่มโปรเจกต์แล้ว"); await load(); },
+    "claude-save": async () => { const key = $("#claudeKey").value.trim(); if (!key) throw new Error("วาง API key ก่อน"); await api("/api/settings/claude", { key }); toast("บันทึก key แล้ว"); await load(); },
+    "claude-test": async () => { await api("/api/settings/claude", {}); toast("Claude ใช้งานได้"); },
+    "claude-remove": async () => { if (!confirm("ลบ API key ที่ใส่จากหน้านี้?")) return; await api("/api/settings/claude/remove", {}); await load(); },
+    "google-connect": async () => { const r = await api("/api/settings/google", { clientId: $("#gId").value, clientSecret: $("#gSecret").value }); location.href = r.url; },
+    "google-reauth": async () => { const r = await api("/api/settings/google/auth"); location.href = r.url; },
+    "google-remove": async () => { if (!confirm("ยกเลิกการเชื่อม Google?")) return; await api("/api/settings/google/remove", {}); await load(); },
+    "notion-save": async () => { const token = $("#nToken").value.trim(); if (!token) throw new Error("วาง token ก่อน"); const r = await api("/api/settings/notion", { token }); toast("เชื่อม Notion แล้ว · " + r.name); await load(); },
+    "notion-remove": async () => { if (!confirm("ยกเลิกการเชื่อม Notion?")) return; await api("/api/settings/notion/remove", {}); await load(); },
+    "projects-save": async () => { await api("/api/settings/projects", { projects: [...document.querySelectorAll("input[name=fp]:checked")].map((x) => x.value) }); toast("บันทึกแล้ว"); await load(); },
+    "nick-add": async () => { $("#nickRows").insertAdjacentHTML("beforeend", nickRow()); },
+    "nick-del": async () => { btn.closest("tr").remove(); },
+    "nick-save": async () => {
+      const map = {};
+      document.querySelectorAll("#nickRows tr").forEach((tr) => { const a = $(".nk", tr).value.trim(), b = $(".nv", tr).value.trim(); if (a && b) map[a] = b; });
+      await api("/api/settings/prefs", { nicknames: map }); toast("บันทึกชื่อเล่นแล้ว"); await load();
+    },
+    "calc-save": async () => { await api("/api/settings/prefs", { staleDays: +$("#pStale").value, bugLabel: $("#pBug").value, manDayHours: +$("#pMd").value }); toast("บันทึกแล้ว"); await load(); },
+    "notify-save": async () => {
+      await api("/api/settings/prefs", {
+        digestTime: $("#nDigest").value, workdaysOnly: $("#nWork").value === "1", quietFrom: $("#nQf").value, quietTo: $("#nQt").value,
+        meetingPrepMinutes: +$("#nPrep").value, milestoneAlertDays: $("#nMs").value, leaveCalendarId: $("#nLeave").value.trim(), notionParentPageId: $("#nNotion").value.trim(),
+        nudge: { enabled: $("#nuOn").value === "1", day: +$("#nuDay").value, time: $("#nuTime").value },
+        weekly: { enabled: $("#wOn").value === "1", day: +$("#wDay").value, time: $("#wTime").value, to: $("#wTo").value, cc: $("#wCc").value },
+      });
+      toast("บันทึกการแจ้งเตือนแล้ว"); await load();
+    },
+    "ws-delete": async () => {
+      const ws = btn.dataset.ws;
+      if (!confirm(`ลบประวัติ log risk CR และงวดงานของ ${wsLabel(ws)}? ย้อนกลับไม่ได้`)) return;
+      await api("/api/settings/delete", { scope: "workspace", ws }); toast("ลบแล้ว"); await load();
+    },
+    "wipe": async () => { await api("/api/settings/delete", { scope: "all", confirm: $("#delConfirm").value.trim() }); toast("ลบข้อมูลทั้งหมดแล้ว"); await load(); },
+  };
+  if (A[act]) await run(btn, A[act]);
+});
+
+addEventListener("hashchange", () => { switching = null; render(); });
+load().catch((e) => { $("#view").innerHTML = `<section class="card"><div class="msg bad">โหลดไม่ได้: ${esc(e.message)}</div></section>`; });
+</script>
+</body>
+</html>

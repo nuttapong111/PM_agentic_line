@@ -43,11 +43,14 @@ export class PlaneClient {
   private itemsPath: string | null = null;
   private cache = new Map<string, { at: number; value: unknown }>();
 
+  readonly kind = "plane" as const;
   constructor(
     private baseUrl = config.plane.baseUrl,
     private apiKey = config.plane.apiKey,
     private workspace = config.plane.workspace,
     private fetchImpl: typeof fetch = fetch,
+    /** Project identifiers to follow; empty = all. */
+    private follow: string[] = config.plane.projects,
   ) {
     this.base = `${this.baseUrl}/api/v1/workspaces/${this.workspace}`;
   }
@@ -127,9 +130,19 @@ export class PlaneClient {
     return this.cached("me", 3600_000, () => this.request<Member>("GET", `${this.baseUrl}/api/v1/users/me/`));
   }
 
+  /** Every project in the workspace, ignoring the follow list (for the Settings picker). */
+  allProjects(): Promise<Project[]> {
+    return this.cached("projects", 600_000, () => this.listAll<Project>("/projects/"));
+  }
+
+  /** Identifies where data comes from, so stored history stays per workspace. */
+  get workspaceKey(): string {
+    return `plane:${this.baseUrl.replace(/^https?:\/\//, "")}/${this.workspace}`;
+  }
+
   async projects(): Promise<Project[]> {
     const all = await this.cached("projects", 600_000, () => this.listAll<Project>("/projects/"));
-    const follow = config.plane.projects.map((p) => p.toUpperCase());
+    const follow = this.follow.map((p) => p.toUpperCase());
     return follow.length ? all.filter((p) => follow.includes(p.identifier.toUpperCase())) : all;
   }
 
@@ -219,6 +232,10 @@ export class PlaneClient {
   async addComment(project: Project, itemId: string, html: string) {
     const path = await this.items();
     await this.request("POST", `${this.base}/projects/${project.id}/${path}/${itemId}/comments/`, { comment_html: html });
+  }
+
+  keyUrl(key: string): string {
+    return `${this.baseUrl}/${this.workspace}/browse/${key}/`;
   }
 
   itemUrl(item: WorkItem): string {

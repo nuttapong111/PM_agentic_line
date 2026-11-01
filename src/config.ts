@@ -40,10 +40,12 @@ export const config = {
     maxToolRounds: Number(opt("CLAUDE_MAX_TOOL_ROUNDS", "8")),
   },
 
+  // Plane values here are only the starting point: the Settings page can replace them
+  // (stored encrypted in the database) without touching env.
   plane: {
-    baseUrl: req("PLANE_BASE_URL").replace(/\/$/, ""),
-    apiKey: req("PLANE_API_KEY"),
-    workspace: req("PLANE_WORKSPACE_SLUG"),
+    baseUrl: opt("PLANE_BASE_URL", "").replace(/\/$/, ""),
+    apiKey: opt("PLANE_API_KEY", ""),
+    workspace: opt("PLANE_WORKSPACE_SLUG", ""),
     // Project identifiers to follow (e.g. ["FDABIGDATA","PEALICENSE"]). Empty = all.
     projects: parseJson<string[]>("PLANE_PROJECTS", []),
     // Nicknames → Plane member email or display name, e.g. {"ต้น":"ton@corp.com"}
@@ -55,6 +57,9 @@ export const config = {
 
   digestCron: opt("DIGEST_CRON", "30 8 * * 1-5"),
   dashboardToken: req("DASHBOARD_TOKEN"),
+  // Key for encrypting secrets saved from the Settings page. Falls back to DASHBOARD_TOKEN
+  // (then changing the dashboard token means re-entering saved secrets).
+  encryptionKey: opt("ENCRYPTION_KEY", process.env.DASHBOARD_TOKEN ?? ""),
 };
 
 export type Config = typeof config;

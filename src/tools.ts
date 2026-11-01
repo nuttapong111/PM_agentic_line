@@ -3,11 +3,11 @@
 // the owner taps ยืนยัน on the confirm card.
 import type Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
-import { PlaneClient, PlaneError, splitKey, type Project, type WorkItem, type WorkItemWrite, type Member } from "./plane.js";
+import { PlaneError, type WorkItem, type WorkItemWrite } from "./plane.js";
 import { projectMetrics, loadContext, view, isOpen, dateStr, memberName, currentCycle, thaiDate } from "./metrics.js";
 import { store } from "./store.js";
-
-export const plane = new PlaneClient();
+import { plane, UserFacingError, resolveProject, projectOfKey, resolveMember, resolveState, checkDate, escapeHtml, nicknames } from "./resolve.js";
+import { featureToolDefs, FEATURE_WRITE_TOOLS, featureToolNames, runFeatureRead, prepareFeatureWrite, executeFeature, type FeaturePlan } from "./features.js";
 
 // ---------------------------------------------------------------- schemas
 
@@ -19,7 +19,7 @@ const projectParam = {
 export const toolDefs: Anthropic.Tool[] = [
   {
     name: "list_projects",
-    description: "รายชื่อโปรเจกต์ใน Plane ที่ติดตามอยู่ พร้อมบอกว่าอันไหนเป็นโปรเจกต์ปัจจุบัน",
+    description: "รายชื่อโปรเจกต์ในระบบจัดการงานที่ติดตามอยู่ พร้อมบอกว่าอันไหนเป็นโปรเจกต์ปัจจุบัน",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -130,80 +130,13 @@ export const toolDefs: Anthropic.Tool[] = [
   },
 ];
 
-export const WRITE_TOOLS = new Set(["create_work_items", "update_work_item", "add_comment"]);
+toolDefs.push(...featureToolDefs);
+
+export const WRITE_TOOLS = new Set(["create_work_items", "update_work_item", "add_comment", ...FEATURE_WRITE_TOOLS]);
 
 // ---------------------------------------------------------------- helpers
 
-export class UserFacingError extends Error {}
-
-export async function resolveProject(ref?: string): Promise<Project> {
-  const projects = await plane.projects();
-  if (!ref) {
-    const cur = projects.find((p) => p.id === store.get().currentProjectId);
-    if (cur) return cur;
-    if (projects.length === 1) return projects[0];
-    throw new UserFacingError(`NEED_PROJECT: ยังไม่ได้เลือกโปรเจกต์ปัจจุบัน ให้ถามผู้ใช้ว่าหมายถึงโปรเจกต์ไหน: ${projects.map((p) => p.name).join(", ")}`);
-  }
-  const q = norm(ref);
-  const hit =
-    projects.find((p) => norm(p.identifier) === q) ??
-    projects.find((p) => norm(p.name) === q) ??
-    projects.find((p) => norm(p.name).includes(q) || q.includes(norm(p.identifier)));
-  if (!hit) throw new UserFacingError(`ไม่พบโปรเจกต์ "${ref}" ที่มี: ${projects.map((p) => `${p.name} (${p.identifier})`).join(", ")}`);
-  return hit;
-}
-
-async function projectOfKey(key: string): Promise<Project> {
-  const [ident] = splitKey(key);
-  const p = (await plane.projects()).find((x) => x.identifier.toUpperCase() === ident);
-  if (!p) throw new UserFacingError(`ไม่พบโปรเจกต์ของรหัส ${key}`);
-  return p;
-}
-
-function norm(s: string) {
-  return s.toLowerCase().replace(/[\s_\-:]+/g, "");
-}
-
-async function resolveMember(projectId: string, who: string): Promise<Member | null> {
-  if (who === "none") return null;
-  const members = await plane.members(projectId);
-  if (who === "me") {
-    const me = await plane.me();
-    return members.find((m) => m.id === me.id) ?? me;
-  }
-  const target = config.plane.nicknames[who] ?? who;
-  const q = norm(target);
-  const hit =
-    members.find((m) => m.email && norm(m.email) === q) ??
-    members.find((m) => [m.display_name, m.first_name, `${m.first_name ?? ""}${m.last_name ?? ""}`].some((n) => n && norm(n) === q)) ??
-    members.find((m) => [m.display_name, m.first_name, m.email].some((n) => n && norm(n).includes(q)));
-  if (!hit) {
-    throw new UserFacingError(
-      `ไม่พบสมาชิกชื่อ "${who}" ในโปรเจกต์ สมาชิกที่มี: ${members.map(memberName).join(", ")} (ตั้งชื่อเล่นได้ในค่า NICKNAMES)`,
-    );
-  }
-  return hit;
-}
-
-async function resolveState(projectId: string, name: string) {
-  const states = await plane.states(projectId);
-  const q = norm(name);
-  const hit =
-    states.find((s) => norm(s.name) === q) ??
-    states.find((s) => norm(s.name).includes(q)) ??
-    states.find((s) => s.group === q || (q === "done" && s.group === "completed") || (q === "todo" && s.group === "unstarted"));
-  if (!hit) throw new UserFacingError(`ไม่พบสถานะ "${name}" สถานะที่มี: ${states.map((s) => s.name).join(", ")}`);
-  return hit;
-}
-
-function checkDate(d: string | undefined, field: string) {
-  if (d === undefined) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new UserFacingError(`${field} ต้องเป็น YYYY-MM-DD (ได้ "${d}")`);
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-}
+export { UserFacingError, resolveProject, plane };
 
 const compact = (v: ReturnType<typeof view>) => ({
   key: v.key, name: v.name, state: v.state, assignees: v.assignees, priority: v.priority, target: v.target,
@@ -286,7 +219,7 @@ export async function runReadTool(name: string, input: any): Promise<unknown> {
       return {
         project: p.name,
         members: members.map((m) => memberName(m)),
-        nicknames: config.plane.nicknames,
+        nicknames: nicknames(),
         states: states.map((s) => ({ name: s.name, group: s.group })),
       };
     }
@@ -295,6 +228,7 @@ export async function runReadTool(name: string, input: any): Promise<unknown> {
       return { url: dashboardUrl(p?.id) };
     }
   }
+  if (featureToolNames.has(name)) return runFeatureRead(name, input);
   throw new Error(`unknown tool ${name}`);
 }
 
@@ -307,6 +241,10 @@ export function dashboardUrl(projectId?: string | null) {
 
 /** What the confirm card shows. Everything is already resolved to IDs. */
 export interface Preview {
+  kicker?: string;
+  cancelLabel?: string;
+  /** HTML shown on the "ดูฉบับเต็ม" page (emails, reports) */
+  fullHtml?: string;
   title: string;
   subtitle: string;
   lines: { tag?: string; text: string; sub: string; warn?: boolean }[];
@@ -315,7 +253,8 @@ export interface Preview {
   plan: WritePlan;
 }
 
-type WritePlan =
+export type WritePlan =
+  | FeaturePlan
   | { kind: "create"; projectId: string; cycleId: string | null; items: (WorkItemWrite & { parentIndex?: number })[] }
   | { kind: "update"; projectId: string; itemId: string; key: string; body: WorkItemWrite; cycleId: string | null }
   | { kind: "comment"; projectId: string; itemId: string; key: string; html: string };
@@ -416,10 +355,12 @@ export async function prepareWrite(name: string, input: any): Promise<Preview> {
       plan: { kind: "comment", projectId: p.id, itemId: it.id, key: it.key, html: `<p>${escapeHtml(input.text)}</p>` },
     };
   }
+  if (FEATURE_WRITE_TOOLS.has(name)) return prepareFeatureWrite(name, input);
   throw new Error(`unknown write tool ${name}`);
 }
 
 export async function executeWrite(plan: WritePlan): Promise<unknown> {
+  if (plan.kind !== "create" && plan.kind !== "update" && plan.kind !== "comment") return executeFeature(plan);
   const project = (await plane.projects()).find((p) => p.id === plan.projectId);
   if (!project) throw new PlaneError(404, "project not found");
   if (plan.kind === "create") {
