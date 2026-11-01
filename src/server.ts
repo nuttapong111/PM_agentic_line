@@ -198,6 +198,10 @@ app.get("/api/usage", (c) => {
 function started(port: number) {
   console.log(`LINE PM Assistant listening on :${port}`);
   console.log(`Dashboard: ${config.publicUrl}/dashboard?t=<DASHBOARD_TOKEN>`);
+  plane.me().then(
+    (me) => console.log(`Plane OK: connected as ${me.display_name}`),
+    (e) => console.error("Plane check failed:", e instanceof Error ? e.message : e),
+  );
   if (process.env.RICHMENU_AUTO !== "false") {
     ensureRichMenu().then((id) => console.log("rich menu ready", id), (e) => console.error("rich menu setup failed", e?.message ?? e));
   }
