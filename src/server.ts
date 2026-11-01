@@ -10,7 +10,8 @@ import { buildDigest } from "./digest.js";
 import { plane, dashboardUrl } from "./tools.js";
 import { projectMetrics } from "./metrics.js";
 import { projectPicker, textMsg } from "./flex.js";
-import { store } from "./store.js";
+import { store, initStore } from "./store.js";
+import { snapshotMetrics, history } from "./db.js";
 import { ensureRichMenu } from "./richmenu.js";
 import { dashboardHtml } from "./assets.js";
 
@@ -108,6 +109,19 @@ cron.schedule(
   { timezone: config.timezone },
 );
 
+// ------------------------------------------------------------- daily history snapshot (Postgres)
+
+async function snapshotAll() {
+  for (const p of await plane.projects()) {
+    try {
+      await snapshotMetrics(await projectMetrics(plane, p));
+    } catch (e) {
+      console.error(`snapshot ${p.identifier} failed`, e instanceof Error ? e.message : e);
+    }
+  }
+}
+cron.schedule("50 23 * * *", () => void snapshotAll().catch((e) => console.error("snapshot failed", e)), { timezone: config.timezone });
+
 // ------------------------------------------------------------- Plane webhook (optional)
 // Plane → Workspace settings → Webhooks → URL https://<host>/plane/webhook, copy the secret into PLANE_WEBHOOK_SECRET.
 
@@ -156,10 +170,23 @@ app.get("/api/dashboard", async (c) => {
     const selected = projects.find((p) => p.id === want) ?? projects.find((p) => p.id === store.get().currentProjectId) ?? projects[0];
     if (!selected) return c.json({ projects: [], metrics: null });
     const metrics = await projectMetrics(plane, selected);
+    void snapshotMetrics(metrics).catch((e) => console.error("snapshot failed", e?.message ?? e)); // today's point stays fresh
     return c.json({ projects: projects.map((p) => ({ id: p.id, name: p.name })), selected: selected.id, metrics, updatedAt: new Date().toISOString() });
   } catch (e) {
     console.error("dashboard api failed", e);
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+app.get("/api/history", async (c) => {
+  if (!safeEqual(c.req.query("t") ?? "", config.dashboardToken)) return c.json({ error: "unauthorized" }, 401);
+  const projectId = c.req.query("project") ?? "";
+  const days = Math.min(365, Math.max(7, Number(c.req.query("days")) || 90));
+  try {
+    return c.json(await history(projectId, days));
+  } catch (e) {
+    console.error("history api failed", e);
+    return c.json({ error: "history unavailable" }, 502);
   }
 });
 
@@ -177,6 +204,7 @@ function started(port: number) {
 }
 
 // Railway Functions run on Bun; elsewhere use Node's HTTP server.
+await initStore();
 const bun = (globalThis as { Bun?: { serve(o: { port: number; fetch: typeof app.fetch }): unknown } }).Bun;
 if (bun) {
   bun.serve({ port: config.port, fetch: app.fetch });

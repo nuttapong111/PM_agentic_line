@@ -20,6 +20,7 @@
     "@line/bot-sdk": "^11.4.0",
     "hono": "^4.13.16",
     "node-cron": "^4.6.0",
+    "postgres": "^3.4.9",
     "tsx": "^4.23.15"
   },
   "devDependencies": {

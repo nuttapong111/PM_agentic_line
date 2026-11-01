@@ -8,6 +8,7 @@
 - โปรเจกต์ปัจจุบัน: ไม่ต้องพิมพ์ชื่อโปรเจกต์ทุกครั้ง (รหัสงานในข้อความ > ชื่อโปรเจกต์ในข้อความ > โปรเจกต์ปัจจุบัน > ถามด้วยปุ่ม)
 - สรุปเช้า จ-ศ 08:30 (คำนวณจาก Plane ไม่เรียก AI ไม่เสียเงิน)
 - Dashboard: burndown, งานเพิ่มกลาง sprint, งานค้างนิ่งเกิน 5 วัน, module เทียบกำหนด, workload, bug ตาม priority
+- ประวัติย้อนหลัง (ต้องมี PostgreSQL): กราฟแนวโน้มงานเปิด/เลยกำหนด/Blocked/ค้างนาน 30 วัน–6 เดือน, log ทุกอย่างที่บอทแก้ใน Plane, ยอดใช้ Claude รายเดือน
 - Rich menu 6 ปุ่ม ติดตั้งให้อัตโนมัติตอนเริ่มระบบ
 
 ## ตั้งค่า
@@ -25,6 +26,7 @@
 npm install
 npm run dev          # รันในเครื่อง
 npm test             # self-test แบบ offline (mock Plane)
+TEST_DATABASE_URL=postgres://... npm test   # ทดสอบส่วน PostgreSQL ด้วย
 npm run typecheck
 npm run richmenu     # ติดตั้ง rich menu ใหม่ทันที
 ```

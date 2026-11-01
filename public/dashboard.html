@@ -48,6 +48,10 @@
   .legend i { display:inline-block; width:16px; vertical-align:middle; margin-right:6px; }
   svg text { font-family:inherit; }
   .empty { color:var(--muted); font-size:14px; }
+  .seg { display:flex; gap:4px; } .seg button { height:30px; padding:0 12px; border-radius:8px; border:1px solid var(--line); background:#fff; font:600 13px inherit; font-family:inherit; cursor:pointer; color:var(--ink); }
+  .seg button[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .feed { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; } .feed li { padding:8px 0; border-top:1px solid var(--line); font-size:14px; display:flex; gap:10px; }
+  .feed li:first-child { border-top:0; } .feed time { flex:0 0 92px; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
   #error { background:#FDECEA; color:#8C1D16; padding:12px 16px; border-radius:12px; display:none; }
   @media (max-width:600px){ main{padding:12px;} header{padding:10px 12px;} }
 </style>
@@ -76,6 +80,16 @@
     <section class="card narrow"><h2>Bug ที่เปิดอยู่ตาม priority</h2><div id="bugs"></div></section>
   </div>
   <section class="card"><h2>เลยกำหนด และครบกำหนด 7 วันข้างหน้า</h2><div class="tbl" id="due"></div></section>
+  <section class="card" id="histCard"><div class="head"><h2>แนวโน้มย้อนหลัง</h2>
+    <div class="seg" id="range"><button type="button" data-d="30">30 วัน</button><button type="button" data-d="90" aria-pressed="true">90 วัน</button><button type="button" data-d="180">6 เดือน</button></div></div>
+    <div id="trend"></div>
+    <div class="legend"><span><i style="border-top:3px solid #2448C8"></i>งานเปิด</span><span><i style="border-top:3px solid #A2231B"></i>เลยกำหนด</span><span><i style="border-top:3px solid #C2410C"></i>Blocked</span><span><i style="border-top:3px dashed #8A94A3"></i>ค้างนาน</span></div>
+    <span class="note">บันทึกทุกวัน 23:50 และทุกครั้งที่เปิด Dashboard หรือส่งสรุปเช้า</span>
+  </section>
+  <div class="row">
+    <section class="card wide"><h2>ประวัติสิ่งที่บอททำใน Plane</h2><div id="activity"></div></section>
+    <section class="card narrow"><h2>การใช้ Claude รายเดือน</h2><div class="tbl" id="usage"></div></section>
+  </div>
 </main>
 <script>
 (() => {
@@ -190,6 +204,56 @@
     fill("due", table(["กำหนด", "งาน", "ผู้รับผิดชอบ", "สถานะ"], due.map((v) => [el("span", { style: v.late ? "color:var(--red);font-weight:600" : "" }, v.when), el("span", {}, link(v), " ", v.name), v.assignees.join(", ") || "-", v.state])));
   }
 
+  let days = 90;
+  function trend(points) {
+    const NS = "http://www.w3.org/2000/svg";
+    const W = 900, H = 240, P = 32;
+    const series = [["open", "#2448C8", ""], ["overdue", "#A2231B", ""], ["blocked", "#C2410C", ""], ["stale", "#8A94A3", "5 4"]];
+    const maxY = Math.max(1, ...points.flatMap((p) => series.map(([k]) => p[k])));
+    const t0 = Date.parse(points[0].day), span = Math.max(1, Date.parse(points[points.length - 1].day) - t0);
+    const X = (d) => P + (Date.parse(d) - t0) / span * (W - P - 70);
+    const Y = (v) => 10 + (1 - v / maxY) * (H - 10 - P);
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", "100%"); svg.setAttribute("role", "img");
+    const last = points[points.length - 1];
+    svg.setAttribute("aria-label", `แนวโน้ม ${points.length} วัน ล่าสุด งานเปิด ${last.open} เลยกำหนด ${last.overdue} Blocked ${last.blocked}`);
+    const add = (name, a, text) => { const n = document.createElementNS(NS, name); for (const k in a) n.setAttribute(k, a[k]); if (text != null) n.textContent = text; svg.append(n); return n; };
+    add("line", { x1: P, y1: H - P, x2: W - 70, y2: H - P, stroke: "#C9D3DF" });
+    add("text", { x: 2, y: Y(maxY) + 4, "font-size": 12, fill: "#5A6573" }, maxY);
+    add("text", { x: 2, y: Y(0), "font-size": 12, fill: "#5A6573" }, 0);
+    add("text", { x: P, y: H - 8, "font-size": 12, fill: "#5A6573" }, th(points[0].day));
+    add("text", { x: W - 70, y: H - 8, "font-size": 12, fill: "#5A6573", "text-anchor": "end" }, th(last.day));
+    for (const [k, color, dash] of series) {
+      if (points.length > 1) add("polyline", { points: points.map((p) => `${X(p.day)},${Y(p[k])}`).join(" "), fill: "none", stroke: color, "stroke-width": 2.5, "stroke-dasharray": dash, "stroke-linejoin": "round" });
+      add("circle", { cx: X(last.day), cy: Y(last[k]), r: 3.5, fill: color });
+      add("text", { x: X(last.day) + 8, y: Y(last[k]) + 4, "font-size": 12, fill: color, "font-weight": 600 }, last[k]);
+    }
+    return svg;
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`/api/history?${new URLSearchParams({ t: token, project, days: String(days) })}`);
+      const h = await res.json();
+      if (!res.ok) throw new Error(h.error || res.statusText);
+      if (!h.enabled) { fill("trend", empty("ยังไม่ได้เชื่อมฐานข้อมูล จึงยังไม่มีประวัติ")); fill("activity", empty("-")); fill("usage", empty("-")); return; }
+      fill("trend", h.points.length ? trend(h.points) : empty("ยังไม่มีข้อมูลย้อนหลัง จะเริ่มสะสมตั้งแต่วันนี้"));
+      fill("activity", h.activity.length ? el("ul", { class: "feed" }, h.activity.map((a) => {
+        const d = new Date(a.at);
+        return el("li", {}, el("time", { datetime: a.at }, `${th(d.toISOString())} ${d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`), el("span", {}, a.summary));
+      })) : empty("ยังไม่มีรายการ"));
+      const fmt = (n) => (n || 0).toLocaleString("th-TH");
+      fill("usage", table(["เดือน", "ครั้ง", "Input", "Output"], h.usage.map((u) => [u.month, fmt(u.calls), fmt(u.input + u.cacheRead), fmt(u.output)])));
+    } catch (e) {
+      fill("trend", empty(`โหลดประวัติไม่สำเร็จ: ${e.message}`));
+    }
+  }
+  for (const b of document.querySelectorAll("#range button")) b.addEventListener("click", () => {
+    days = Number(b.dataset.d);
+    for (const x of document.querySelectorAll("#range button")) x.setAttribute("aria-pressed", String(x === b));
+    loadHistory();
+  });
+
   async function load() {
     try {
       const qs = new URLSearchParams({ t: token, ...(project ? { project } : {}) });
@@ -201,6 +265,7 @@
       project = data.selected;
       history.replaceState(null, "", `?${new URLSearchParams({ t: token, project })}`);
       render(data);
+      loadHistory();
     } catch (e) {
       $("error").textContent = `โหลดข้อมูลไม่สำเร็จ: ${e.message}`;
       $("error").style.display = "block";

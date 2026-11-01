@@ -6,6 +6,9 @@ process.env.PLANE_API_KEY ||= "x";
 process.env.PLANE_WORKSPACE_SLUG ||= "ws";
 process.env.DASHBOARD_TOKEN ||= "t";
 process.env.DATA_DIR = "./data-test";
+// Optional DB test: TEST_DATABASE_URL=postgres://... npm test
+if (process.env.TEST_DATABASE_URL) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+else delete process.env.DATABASE_URL;
 
 const { PlaneClient } = await import("../src/plane.js");
 const { projectMetrics, dateStr } = await import("../src/metrics.js");
@@ -75,6 +78,25 @@ check("member wrapped in `member` is resolved", m.workload.some((w) => w.name.in
 
 const cards = [statusCard(m, "https://x/dashboard"), digestCard([m], "วันจันทร์ 1 พ.ย.", "https://x/dashboard")];
 for (const c of cards) check(`card ${c.type} serialises < 30KB`, JSON.stringify(c).length < 30_000);
+
+if (process.env.DATABASE_URL) {
+  const db = await import("../src/db.js");
+  const { initStore, store } = await import("../src/store.js");
+  await initStore();
+  store.update((s) => (s.currentProjectId = "p1"));
+  await new Promise((r) => setTimeout(r, 300));
+  check("state saved to Postgres", (await db.loadState<{ currentProjectId: string }>())?.currentProjectId === "p1");
+  await db.snapshotMetrics(m);
+  await db.snapshotMetrics(m); // idempotent per day
+  db.logActivity("create_work_items", "สร้าง FDA-9 ทดสอบ", "p1");
+  db.logUsage("claude-haiku-5-5", 1000, 200, 500);
+  await new Promise((r) => setTimeout(r, 300));
+  const h = await db.history("p1", 30);
+  check("history has today's point", h.points.length === 1 && h.points[0].overdue === 1, h.points);
+  check("activity logged", h.activity.some((a: any) => a.summary.includes("FDA-9")), h.activity);
+  check("usage logged", (h.usage[0] as any)?.calls >= 1, h.usage);
+  await db.sql!.end();
+}
 
 console.log(failed ? `\n${failed} failed` : "\nall passed");
 process.exit(failed ? 1 : 0);

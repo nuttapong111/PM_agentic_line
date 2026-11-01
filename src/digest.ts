@@ -2,6 +2,7 @@
 import { plane, dashboardUrl } from "./tools.js";
 import { projectMetrics, dateStr, thaiDate } from "./metrics.js";
 import { digestCard } from "./flex.js";
+import { snapshotMetrics } from "./db.js";
 
 const TH_DAY_FULL = ["วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"];
 
@@ -10,7 +11,9 @@ export async function buildDigest() {
   const metrics = [];
   for (const p of projects) {
     try {
-      metrics.push(await projectMetrics(plane, p));
+      const m = await projectMetrics(plane, p);
+      metrics.push(m);
+      await snapshotMetrics(m).catch(() => undefined);
     } catch (e) {
       console.error(`digest: ${p.identifier} failed`, e);
     }

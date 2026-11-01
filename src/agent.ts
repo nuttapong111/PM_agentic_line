@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import type { messagingApi } from "@line/bot-sdk";
 import { config } from "./config.js";
 import { store, type PendingAction } from "./store.js";
+import { logActivity, logUsage } from "./db.js";
 import { toolDefs, WRITE_TOOLS, runReadTool, prepareWrite, executeWrite, resolveProject, UserFacingError, plane, dashboardUrl, type Preview } from "./tools.js";
 import { projectMetrics, dateStr, thaiDate } from "./metrics.js";
 import { statusCard, confirmCard, resultCard, projectPicker, textMsg } from "./flex.js";
@@ -124,6 +125,7 @@ async function confirmPending(p: PendingAction): Promise<TurnResult> {
     try {
       const r: any = await executeWrite((w.preview as Preview).plan);
       results.push({ type: "tool_result", tool_use_id: w.toolUseId, content: JSON.stringify({ ok: true, ...r }) });
+      logActivity(w.name, activitySummary(w.name, r), (w.preview as Preview).plan?.projectId ?? null, { input: w.input, result: r });
       for (const c of r.created ?? []) links.push({ label: `${c.key} ${c.name}`, url: c.url });
       if (r.updated) links.push({ label: `${r.updated.key} ${r.updated.name}`, url: r.updated.url });
       if (r.commented) links.push({ label: `คอมเมนต์ใน ${r.commented}`, url: `${config.plane.baseUrl}/${config.plane.workspace}/browse/${r.commented}/` });
@@ -240,7 +242,15 @@ async function finish(out: Msg[], text: string, statusProjects: Set<string>, nee
   return msgs.slice(-5); // LINE allows at most 5 messages per reply
 }
 
+function activitySummary(name: string, r: any): string {
+  if (r.created?.length) return `สร้าง ${r.created.map((c: any) => `${c.key} ${c.name}`).join(", ")}`;
+  if (r.updated) return `แก้ ${r.updated.key} ${r.updated.name}`;
+  if (r.commented) return `คอมเมนต์ใน ${r.commented}`;
+  return name;
+}
+
 function trackUsage(u: Anthropic.Usage) {
+  logUsage(config.claude.model, (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), u.output_tokens ?? 0, u.cache_read_input_tokens ?? 0);
   const month = dateStr().slice(0, 7);
   store.update((s) => {
     if (s.usage.month !== month) s.usage = { month, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
