@@ -82,6 +82,7 @@ type ModuleMetrics struct {
 	Done    int     `json:"done"`
 	Percent int     `json:"percent"`
 	Target  *string `json:"target"`
+	Start   *string `json:"start"`
 	Status  string  `json:"status"`
 }
 
@@ -512,7 +513,7 @@ func ComputeModules(d *ProjectData, mods []ModuleItems, today string) []ModuleMe
 				status = ModWatch
 			}
 		}
-		out = append(out, ModuleMetrics{Name: m.Name, Total: total, Done: done, Percent: int(math.Round(pct * 100)), Target: target, Status: status})
+		out = append(out, ModuleMetrics{Name: m.Name, Total: total, Done: done, Percent: int(math.Round(pct * 100)), Target: target, Start: m.StartDate, Status: status})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if modRank[out[i].Status] != modRank[out[j].Status] {
