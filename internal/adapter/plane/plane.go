@@ -28,6 +28,46 @@ type Client struct {
 	mu        sync.Mutex
 	itemsPath string // "work-items" on recent Plane, "issues" on older self-hosted builds
 	cache     map[string]cached
+	inflight  map[string]*flight // one load per key at a time
+	sent      []time.Time        // request times in the last minute, for pacing
+}
+
+type flight struct {
+	done  chan struct{}
+	value any
+	err   error
+}
+
+// Plane allows 60 requests a minute per key; stay under it instead of hitting 429 and sleeping.
+const rateWindow, rateMax = time.Minute, 55
+
+// pace waits, if needed, so no more than rateMax requests go out in any rateWindow.
+func (c *Client) pace(ctx context.Context) error {
+	for {
+		c.mu.Lock()
+		now := time.Now()
+		keep := c.sent[:0]
+		for _, t := range c.sent {
+			if now.Sub(t) < rateWindow {
+				keep = append(keep, t)
+			}
+		}
+		c.sent = keep
+		if len(c.sent) < rateMax {
+			c.sent = append(c.sent, now)
+			c.mu.Unlock()
+			return nil
+		}
+		wait := rateWindow - now.Sub(c.sent[0])
+		c.mu.Unlock()
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
 }
 
 type cached struct {
@@ -72,6 +112,9 @@ func (c *Client) request(ctx context.Context, method, u string, body any, out an
 		}
 		req, err := http.NewRequestWithContext(ctx, method, u, rd)
 		if err != nil {
+			return err
+		}
+		if err := c.pace(ctx); err != nil {
 			return err
 		}
 		req.Header.Set("X-API-Key", c.apiKey)
@@ -165,21 +208,36 @@ func decodeAll[T any](raw []json.RawMessage) []T {
 	return out
 }
 
+// cachedCall returns a fresh cached value, or loads it once even when several callers ask at the same time.
 func cachedCall[T any](c *Client, key string, ttl time.Duration, load func() (T, error)) (T, error) {
 	c.mu.Lock()
 	if hit, ok := c.cache[key]; ok && time.Since(hit.at) < ttl {
 		c.mu.Unlock()
 		return hit.value.(T), nil
 	}
-	c.mu.Unlock()
-	v, err := load()
-	if err != nil {
-		return v, err
+	if f, ok := c.inflight[key]; ok {
+		c.mu.Unlock()
+		<-f.done
+		v, _ := f.value.(T)
+		return v, f.err
 	}
-	c.mu.Lock()
-	c.cache[key] = cached{time.Now(), v}
+	if c.inflight == nil {
+		c.inflight = map[string]*flight{}
+	}
+	f := &flight{done: make(chan struct{})}
+	c.inflight[key] = f
 	c.mu.Unlock()
-	return v, nil
+
+	v, err := load()
+	c.mu.Lock()
+	if err == nil {
+		c.cache[key] = cached{time.Now(), v}
+	}
+	delete(c.inflight, key)
+	c.mu.Unlock()
+	f.value, f.err = v, err
+	close(f.done)
+	return v, err
 }
 
 func (c *Client) invalidate(prefix string) {
@@ -319,7 +377,7 @@ type link struct {
 }
 
 func (c *Client) CycleLinks(ctx context.Context, projectID, cycleID string) ([]domain.CycleLink, error) {
-	return cachedCall(c, "cycleitems:"+projectID+":"+cycleID, 2*time.Minute, func() ([]domain.CycleLink, error) {
+	return cachedCall(c, "cycleitems:"+projectID+":"+cycleID, 5*time.Minute, func() ([]domain.CycleLink, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/cycles/"+cycleID+"/cycle-issues/", nil)
 		out := []domain.CycleLink{}
 		for _, l := range decodeAll[link](raw) {
@@ -334,7 +392,7 @@ func (c *Client) CycleLinks(ctx context.Context, projectID, cycleID string) ([]d
 }
 
 func (c *Client) ModuleItemIDs(ctx context.Context, projectID, moduleID string) ([]string, error) {
-	return cachedCall(c, "moduleitems:"+projectID+":"+moduleID, 2*time.Minute, func() ([]string, error) {
+	return cachedCall(c, "moduleitems:"+projectID+":"+moduleID, 10*time.Minute, func() ([]string, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", nil)
 		out := []string{}
 		for _, l := range decodeAll[link](raw) {

@@ -36,6 +36,10 @@ type Workload struct {
 	Name        string `json:"name"`
 	Open        int    `json:"open"`
 	DueThisWeek int    `json:"dueThisWeek"`
+	Todo        int    `json:"todo"`
+	InProgress  int    `json:"inProgress"`
+	Blocked     int    `json:"blocked"`
+	DueNext7    int    `json:"dueNext7"`
 }
 
 type BugCount struct {
@@ -282,8 +286,20 @@ func ComputeMetrics(d *ProjectData, in MetricsInput) ProjectMetrics {
 				order = append(order, n)
 			}
 			w.Open++
-			if t := it.Target(); t != "" && t <= weekEnd {
+			t := it.Target()
+			if t != "" && t <= weekEnd {
 				w.DueThisWeek++
+			}
+			if t != "" && t >= today && t <= AddDays(today, 7) {
+				w.DueNext7++
+			}
+			switch {
+			case d.IsBlocked(it):
+				w.Blocked++
+			case d.Group(it) == GroupStarted:
+				w.InProgress++
+			default:
+				w.Todo++
 			}
 		}
 	}

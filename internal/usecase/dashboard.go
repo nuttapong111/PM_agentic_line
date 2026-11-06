@@ -5,6 +5,8 @@ import (
 	"html"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/nuttapong111/pm_agentic_line/internal/domain"
 	"github.com/nuttapong111/pm_agentic_line/internal/port"
@@ -41,22 +43,17 @@ func (a *App) Dashboard(ctx context.Context, want string) (map[string]any, error
 	if sel == nil {
 		return map[string]any{"projects": []projectName{}, "metrics": nil}, nil
 	}
-	m, err := a.ProjectMetrics(ctx, *sel)
+	m, at, err := a.dashMetrics(ctx, *sel)
 	if err != nil {
 		return nil, err
 	}
-	go func() { // today's point stays fresh
-		if err := a.Snapshot(context.Background(), m); err != nil {
-			slog.Error("snapshot failed", "err", err)
-		}
-	}()
 	names := make([]projectName, len(ps))
 	for i, p := range ps {
 		names[i] = projectName{p.ID, p.Name}
 	}
 	return map[string]any{
 		"projects": names, "selected": sel.ID, "metrics": m,
-		"updatedAt": a.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		"updatedAt": at.UTC().Format("2006-01-02T15:04:05.000Z"),
 	}, nil
 }
 
@@ -169,4 +166,84 @@ func (a *App) OAuthPage(msg string, ok bool) string {
 	return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google</title>
 <body style="font-family:system-ui,sans-serif;padding:32px;max-width:520px;margin:auto;color:#18202B"><h2 style="color:` + color + `">` + title + `</h2><p>` +
 		strings.ReplaceAll(msg, "<", "&lt;") + `</p><p><a href="` + html.EscapeString(back) + `">กลับไปหน้าตั้งค่า</a></p></body>`
+}
+
+// The dashboard serves metrics from memory: fresh for dashFresh, then the last result is shown at once
+// while a background refresh runs (up to dashStale). This keeps the page quick and well under the task
+// tool's rate limit when it is reloaded or left open.
+const (
+	dashFresh = 30 * time.Second
+	dashStale = 30 * time.Minute
+)
+
+type dashCache struct {
+	mu         sync.Mutex
+	entries    map[string]dashEntry
+	refreshing map[string]bool
+}
+
+type dashEntry struct {
+	at time.Time
+	m  domain.ProjectMetrics
+}
+
+func (a *App) dashMetrics(ctx context.Context, p domain.Project) (domain.ProjectMetrics, time.Time, error) {
+	c := &a.dash
+	c.mu.Lock()
+	e, ok := c.entries[p.ID]
+	age := time.Since(e.at)
+	if ok && age < dashFresh {
+		c.mu.Unlock()
+		return e.m, e.at, nil
+	}
+	if ok && age < dashStale {
+		if !c.refreshing[p.ID] {
+			if c.refreshing == nil {
+				c.refreshing = map[string]bool{}
+			}
+			c.refreshing[p.ID] = true
+			go func() {
+				bg, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+				defer cancel()
+				if _, _, err := a.computeDash(bg, p); err != nil {
+					slog.Warn("dashboard refresh failed", "project", p.Identifier, "err", err)
+				}
+				c.mu.Lock()
+				delete(c.refreshing, p.ID)
+				c.mu.Unlock()
+			}()
+		}
+		c.mu.Unlock()
+		return e.m, e.at, nil
+	}
+	c.mu.Unlock()
+	return a.computeDash(ctx, p)
+}
+
+func (a *App) computeDash(ctx context.Context, p domain.Project) (domain.ProjectMetrics, time.Time, error) {
+	m, err := a.ProjectMetrics(ctx, p)
+	if err != nil {
+		return m, time.Time{}, err
+	}
+	now := time.Now()
+	c := &a.dash
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = map[string]dashEntry{}
+	}
+	c.entries[p.ID] = dashEntry{now, m}
+	c.mu.Unlock()
+	go func() { // today's history point stays fresh
+		if err := a.Snapshot(context.Background(), m); err != nil {
+			slog.Error("snapshot failed", "err", err)
+		}
+	}()
+	return m, now, nil
+}
+
+// ForgetDashboard drops cached dashboard metrics after a write so the next load is current.
+func (a *App) ForgetDashboard(projectID string) {
+	a.dash.mu.Lock()
+	delete(a.dash.entries, projectID)
+	a.dash.mu.Unlock()
 }

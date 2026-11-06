@@ -40,6 +40,7 @@ type App struct {
 	toolNames map[string]bool
 	writes    map[string]bool
 	tickMu    sync.Mutex
+	dash      dashCache
 }
 
 func New(d Deps) *App {

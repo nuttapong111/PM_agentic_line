@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"sync"
 
 	"github.com/nuttapong111/pm_agentic_line/internal/domain"
 )
@@ -9,21 +10,31 @@ import (
 // LoadData fetches what metrics and tools need about one project.
 func (a *App) LoadData(ctx context.Context, p domain.Project) (*domain.ProjectData, error) {
 	t := a.tasks()
-	items, err := t.WorkItems(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-	states, err := t.States(ctx, p.ID)
-	if err != nil {
-		return nil, err
-	}
-	members, err := t.Members(ctx, p.ID)
-	if err != nil {
-		return nil, err
-	}
-	labels, err := t.Labels(ctx, p.ID)
-	if err != nil {
-		labels = nil
+	// The four lists are independent: fetch them together.
+	var (
+		wg                   sync.WaitGroup
+		items                []domain.WorkItem
+		states               []domain.State
+		members              []domain.Member
+		labels               []domain.Label
+		errItems, errS, errM error
+	)
+	wg.Add(4)
+	go func() { defer wg.Done(); items, errItems = t.WorkItems(ctx, p) }()
+	go func() { defer wg.Done(); states, errS = t.States(ctx, p.ID) }()
+	go func() { defer wg.Done(); members, errM = t.Members(ctx, p.ID) }()
+	go func() {
+		defer wg.Done()
+		var err error
+		if labels, err = t.Labels(ctx, p.ID); err != nil {
+			labels = nil
+		}
+	}()
+	wg.Wait()
+	for _, err := range []error{errItems, errS, errM} {
+		if err != nil {
+			return nil, err
+		}
 	}
 	return domain.NewProjectData(p, items, states, members, labels), nil
 }
@@ -68,20 +79,41 @@ func (a *App) metricsFor(ctx context.Context, d *domain.ProjectData) domain.Proj
 		Now: a.Now(), Loc: a.Loc, StaleDays: prefs.StaleDays, BugLabel: prefs.BugLabel,
 		ItemURL: t.ItemURL, URL: t.ProjectURL(p),
 	}
-	if c := a.currentCycle(ctx, p.ID); c != nil {
-		in.Cycle = c
-		in.CycleRows, _ = t.CycleLinks(ctx, p.ID, c.ID)
-	}
-	mods, err := t.Modules(ctx, p.ID)
-	if err == nil {
-		for _, m := range mods {
-			ids, err := t.ModuleItemIDs(ctx, p.ID, m.ID)
-			if err != nil {
-				ids = nil
-			}
-			in.Modules = append(in.Modules, domain.ModuleItems{Module: m, ItemIDs: ids})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if c := a.currentCycle(ctx, p.ID); c != nil {
+			in.Cycle = c
+			in.CycleRows, _ = t.CycleLinks(ctx, p.ID, c.ID)
 		}
-	}
+	}()
+	go func() {
+		defer wg.Done()
+		mods, err := t.Modules(ctx, p.ID)
+		if err != nil {
+			return
+		}
+		// Each module's items is its own request: a few at a time, results kept in module order.
+		out := make([]domain.ModuleItems, len(mods))
+		sem := make(chan struct{}, 4)
+		var mw sync.WaitGroup
+		for i, m := range mods {
+			mw.Add(1)
+			sem <- struct{}{}
+			go func(i int, m domain.Module) {
+				defer func() { <-sem; mw.Done() }()
+				ids, err := t.ModuleItemIDs(ctx, p.ID, m.ID)
+				if err != nil {
+					ids = nil
+				}
+				out[i] = domain.ModuleItems{Module: m, ItemIDs: ids}
+			}(i, m)
+		}
+		mw.Wait()
+		in.Modules = out
+	}()
+	wg.Wait()
 	return domain.ComputeMetrics(d, in)
 }
 

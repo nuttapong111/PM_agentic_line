@@ -631,6 +631,9 @@ type itemRef struct {
 
 // ExecuteWrite runs a confirmed plan.
 func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, error) {
+	if plan.ProjectID != nil {
+		defer a.ForgetDashboard(*plan.ProjectID)
+	}
 	switch plan.Kind {
 	case domain.PlanProject, domain.PlanMembers:
 		return a.executeProject(ctx, plan)
