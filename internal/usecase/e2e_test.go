@@ -388,6 +388,24 @@ func TestMailPick(t *testing.T) {
 	c.check("search_email is a read tool", e.app.toolNames["search_email"] && !e.app.IsWriteTool("search_email"))
 }
 
+func TestImageFollowsPreviousRequest(t *testing.T) {
+	e := newEnv(t, metricsData(), false)
+	c := checker{t}
+	ctx := context.Background()
+	lastCaption := func() string {
+		r := e.llm.requests[len(e.llm.requests)-1]
+		m := r.Messages[len(r.Messages)-1]
+		return toJSON(m.Content)
+	}
+	e.app.HandleImage(ctx, "aGk=", "image/png", "")
+	c.check("photo alone becomes work items", strings.Contains(lastCaption(), "แปลงรายการในรูปนี้เป็นงาน"), lastCaption())
+
+	e.app.HandleText(ctx, "reset")
+	e.app.HandleText(ctx, "สร้างงวดงานจากรูปนี้")
+	e.app.HandleImage(ctx, "aGk=", "image/png", "")
+	c.check("photo after a request follows it", strings.Contains(lastCaption(), "ต่อจากข้อความก่อนหน้า"), lastCaption())
+}
+
 func TestNeedProjectPicker(t *testing.T) {
 	data := metricsData()
 	data["/projects/"] = pageOf(jo{"id": "p1", "name": "FDA Big Data", "identifier": "FDA"}, jo{"id": "p2", "name": "ERP", "identifier": "ERP"})

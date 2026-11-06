@@ -19,9 +19,11 @@ import (
 // The agent loop: Claude + tools, with a pause for the owner's confirmation before any write.
 
 const (
-	idleReset   = 30 * time.Minute
-	maxHistory  = 60
-	maxReplyMsg = 5 // LINE allows at most 5 messages per reply
+	idleReset = 30 * time.Minute
+	// imageFollowUp: a photo sent within this time of the last message follows that message's request.
+	imageFollowUp = 5 * time.Minute
+	maxHistory    = 60
+	maxReplyMsg   = 5 // LINE allows at most 5 messages per reply
 )
 
 var (
@@ -80,12 +82,18 @@ func (a *App) HandleText(ctx context.Context, userText string) []port.Message {
 // HandleImage reads a photo (whiteboard, notebook, screenshot), usually into a create_work_items card.
 func (a *App) HandleImage(ctx context.Context, base64Data, mediaType, caption string) []port.Message {
 	now := a.nowMs()
+	recent := false
 	a.Store.Update(func(s *domain.AppState) {
 		if now-s.Conversation.LastAt > idleReset.Milliseconds() {
 			s.ResetConversation()
 		}
+		recent = len(s.Conversation.Messages) > 0 && now-s.Conversation.LastAt <= imageFollowUp.Milliseconds()
 	})
 	a.closePending("ผู้ใช้ส่งรูปใหม่แทนการกดยืนยัน ให้ถือว่ายังไม่ได้ทำรายการนี้")
+	if caption == "" && recent {
+		// LINE images carry no caption: the instruction is usually the text sent just before.
+		caption = "นี่คือรูปที่ผู้ใช้ส่งมาต่อจากข้อความก่อนหน้า ให้ทำตามที่ผู้ใช้ขอไว้ในข้อความล่าสุดโดยใช้ข้อมูลในรูป (เช่น สร้างงวดงาน บันทึกความเสี่ยง หรือ CR) ถ้าข้อความก่อนหน้าไม่ได้ขออะไรเกี่ยวกับรูป ให้แปลงรายการในรูปเป็นงานในโปรเจกต์ปัจจุบัน (ใส่ใน cycle ปัจจุบัน)"
+	}
 	if caption == "" {
 		caption = "แปลงรายการในรูปนี้เป็นงานในโปรเจกต์ปัจจุบันให้หน่อย (ใส่ใน cycle ปัจจุบัน) ถ้าในรูปไม่ใช่รายการงาน ให้บอกสั้น ๆ ว่าเห็นอะไร"
 	}
