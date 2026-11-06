@@ -268,7 +268,7 @@ func TestMetricsAndCards(t *testing.T) {
 	c.check("member wrapped in `member` is resolved", hasTon, m.Workload)
 
 	v := line.Presenter{}
-	for _, card := range []port.Message{v.Status(m, "https://x/dashboard"), v.Digest([]domain.ProjectMetrics{m}, "วันจันทร์ 1 พ.ย.", "https://x/dashboard", nil)} {
+	for _, card := range []port.Message{v.Status(m, "https://x/dashboard"), v.Digest([]domain.ProjectMetrics{m}, "วันจันทร์ 1 พ.ย.", "https://x/dashboard", nil, nil)} {
 		b, _ := json.Marshal(card)
 		c.check("card serialises < 30KB", len(b) < 30_000 && card["type"] == "flex", len(b))
 	}
@@ -371,6 +371,21 @@ func TestCreateCycle(t *testing.T) {
 	c.check("duplicate name refused", err != nil, err)
 	_, err = e.app.PrepareWrite(ctx, "create_cycle", json.RawMessage(`{"project":"FDA","name":"X","start_date":"`+dd(10)+`","end_date":"`+dd(5)+`"}`))
 	c.check("end before start refused", err != nil, err)
+}
+
+func TestMailPick(t *testing.T) {
+	e := newEnv(t, metricsData(), false)
+	c := checker{t}
+	ctx := context.Background()
+	items := []domain.MailItem{
+		{From: "Newsletter <news@vendor.test>", Subject: "Weekly tips", Unread: true},
+		{From: "\"คุณสมชาย อย.\" <somchai@fda.test>", Subject: "ขอเลื่อน UAT", Snippet: "รบกวนเลื่อน UAT เป็นวันที่ 18", Unread: true},
+	}
+	e.llm.responses = []port.LLMResponse{{StopReason: "end_turn", Content: []domain.Block{domain.TextBlock(`นี่ครับ [{"n":2,"why":"ลูกค้าขอเลื่อน UAT เป็น 18 พ.ย. ต้องตอบ"},{"n":9,"why":"x"}]`)}}}
+	got, err := e.app.pickMail(ctx, items)
+	c.check("picks the client mail by sender name, drops bad index", err == nil && len(got) == 1 && strings.HasPrefix(got[0], "คุณสมชาย อย.: ลูกค้าขอเลื่อน"), err, got)
+	c.check("email text fenced as data", len(e.llm.requests) == 1 && strings.Contains(e.llm.requests[0].Messages[0].Content[0]["text"].(string), "<emails>"), e.llm.requests)
+	c.check("search_email is a read tool", e.app.toolNames["search_email"] && !e.app.IsWriteTool("search_email"))
 }
 
 func TestNeedProjectPicker(t *testing.T) {

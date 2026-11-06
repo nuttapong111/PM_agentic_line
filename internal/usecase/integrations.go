@@ -137,6 +137,15 @@ func (g *Google) ListEvents(ctx context.Context, from, to time.Time, calendarID,
 	return g.api.ListEvents(ctx, tok, calendarID, from, to, q)
 }
 
+// ListMail searches the owner's Gmail (headers and snippets only).
+func (g *Google) ListMail(ctx context.Context, query string, max int) ([]domain.MailItem, error) {
+	tok, err := g.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return g.api.ListMail(ctx, tok, query, max)
+}
+
 // TodaysMeetings lists today's timed events.
 func (g *Google) TodaysMeetings(ctx context.Context) ([]domain.CalEvent, error) {
 	today := domain.DateIn(g.now(), g.loc)

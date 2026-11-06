@@ -8,9 +8,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +27,7 @@ var scopes = []string{
 	"https://www.googleapis.com/auth/calendar.readonly",
 	"https://www.googleapis.com/auth/calendar.events",
 	"https://www.googleapis.com/auth/gmail.send",
+	"https://www.googleapis.com/auth/gmail.readonly",
 }
 
 type Client struct {
@@ -343,4 +346,54 @@ func (c *Client) SendEmail(ctx context.Context, token string, e port.Email) (str
 	}
 	err := c.api(ctx, token, http.MethodPost, c.GmailURL+"/users/me/messages/send", map[string]string{"raw": raw}, &j)
 	return j.ID, err
+}
+
+// ListMail searches Gmail and returns headers and snippets only.
+func (c *Client) ListMail(ctx context.Context, token, query string, max int) ([]domain.MailItem, error) {
+	if max <= 0 || max > 25 {
+		max = 15
+	}
+	q := url.Values{"q": {query}, "maxResults": {strconv.Itoa(max)}}
+	var list struct {
+		Messages []struct {
+			ID string `json:"id"`
+		} `json:"messages"`
+	}
+	if err := c.api(ctx, token, http.MethodGet, c.GmailURL+"/users/me/messages?"+q.Encode(), nil, &list); err != nil {
+		return nil, err
+	}
+	out := []domain.MailItem{}
+	for _, m := range list.Messages {
+		var msg struct {
+			ID       string   `json:"id"`
+			ThreadID string   `json:"threadId"`
+			Snippet  string   `json:"snippet"`
+			LabelIDs []string `json:"labelIds"`
+			Payload  struct {
+				Headers []struct{ Name, Value string } `json:"headers"`
+			} `json:"payload"`
+		}
+		u := c.GmailURL + "/users/me/messages/" + url.PathEscape(m.ID) + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date"
+		if err := c.api(ctx, token, http.MethodGet, u, nil, &msg); err != nil {
+			return out, err
+		}
+		it := domain.MailItem{ID: msg.ID, ThreadID: msg.ThreadID, Snippet: html.UnescapeString(msg.Snippet), URL: "https://mail.google.com/mail/#all/" + msg.ThreadID}
+		for _, h := range msg.Payload.Headers {
+			switch strings.ToLower(h.Name) {
+			case "from":
+				it.From = h.Value
+			case "subject":
+				it.Subject = h.Value
+			case "date":
+				it.Date = h.Value
+			}
+		}
+		for _, l := range msg.LabelIDs {
+			if l == "UNREAD" {
+				it.Unread = true
+			}
+		}
+		out = append(out, it)
+	}
+	return out, nil
 }

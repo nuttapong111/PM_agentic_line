@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// MailItem is one Gmail message's headers and snippet (the body is never fetched).
+type MailItem struct {
+	ID       string `json:"id"`
+	ThreadID string `json:"threadId"`
+	From     string `json:"from"`
+	Subject  string `json:"subject"`
+	Snippet  string `json:"snippet"`
+	Date     string `json:"date"`
+	Unread   bool   `json:"unread"`
+	URL      string `json:"url"`
+}
+
 // CalEvent is a calendar event, normalised from Google Calendar.
 type CalEvent struct {
 	ID          string   `json:"id"`

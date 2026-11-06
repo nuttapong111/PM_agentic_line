@@ -198,6 +198,8 @@ type GoogleAPI interface {
 	FreeBusy(ctx context.Context, token string, emails []string, from, to time.Time, tz string) (map[string][]domain.Interval, []string, error)
 	InsertMeeting(ctx context.Context, token string, m MeetingRequest) (domain.CalEvent, error)
 	SendEmail(ctx context.Context, token string, e Email) (string, error)
+	// ListMail returns message headers and snippets for a Gmail search (needs gmail.readonly).
+	ListMail(ctx context.Context, token, query string, max int) ([]domain.MailItem, error)
 }
 
 // NotionAPI is the Notion REST API. Calls take the integration token.
@@ -255,7 +257,7 @@ type Messenger interface {
 type Presenter interface {
 	Text(t string) Message
 	Status(m domain.ProjectMetrics, dashboardURL string) Message
-	Digest(list []domain.ProjectMetrics, dateLabel, dashboardURL string, meetings []string) Message
+	Digest(list []domain.ProjectMetrics, dateLabel, dashboardURL string, meetings, mails []string) Message
 	Confirm(p domain.Preview, id string, proactive bool, previewURL string) Message
 	Result(title string, links []domain.Link) Message
 	ProjectPicker(prompt string, projects []domain.Project) Message

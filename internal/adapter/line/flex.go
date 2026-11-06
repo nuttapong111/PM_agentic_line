@@ -162,7 +162,7 @@ func (Presenter) Status(m domain.ProjectMetrics, dashboardURL string) port.Messa
 	return flex(alt, bubble([]box{text(head1, box{"size": "xs", "color": muted}), text(head2, box{"weight": "bold", "size": "md"})}, body, footer, ""))
 }
 
-func (Presenter) Digest(list []domain.ProjectMetrics, dateLabel, dashboardURL string, meetings []string) port.Message {
+func (Presenter) Digest(list []domain.ProjectMetrics, dateLabel, dashboardURL string, meetings, mails []string) port.Message {
 	var overdue, today []domain.ItemView
 	for _, m := range list {
 		overdue = append(overdue, m.Overdue...)
@@ -199,6 +199,13 @@ func (Presenter) Digest(list []domain.ProjectMetrics, dateLabel, dashboardURL st
 			lines = append(lines, text(t, nil))
 		}
 		section(fmt.Sprintf("ประชุมวันนี้ %d", len(meetings)), "#3D4855", lines)
+	}
+	if len(mails) > 0 {
+		lines = nil
+		for _, t := range mails {
+			lines = append(lines, text(t, box{"wrap": true}))
+		}
+		section(fmt.Sprintf("อีเมลที่ควรดู %d", len(mails)), "#3D4855", lines)
 	}
 	first := true
 	for _, m := range list {

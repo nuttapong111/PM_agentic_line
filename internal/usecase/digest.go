@@ -43,7 +43,7 @@ func (a *App) BuildDigest(ctx context.Context) port.Message {
 			meetings = append(meetings, s)
 		}
 	}
-	return a.View.Digest(metrics, label, a.DashboardURL(""), meetings)
+	return a.View.Digest(metrics, label, a.DashboardURL(""), meetings, a.mailHighlights(ctx))
 }
 
 // SnapshotAll saves today's metrics point for every project (run nightly).

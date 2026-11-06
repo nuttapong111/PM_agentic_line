@@ -144,6 +144,8 @@ var featureTools = []port.ToolDef{
 		"project": featureProject, "title": str(""), "start": str("YYYY-MM-DDTHH:MM"), "end": str("YYYY-MM-DDTHH:MM"),
 		"attendees": strArray, "agenda": str(""),
 	}, "title", "start", "end")),
+	tool("search_email", "ค้นอีเมลใน Gmail ของผู้ใช้ (อ่านอย่างเดียว ได้หัวเรื่อง ผู้ส่ง และข้อความตัวอย่าง) query ใช้รูปแบบค้นหาของ Gmail เช่น from:client.com newer_than:3d หรือ is:unread",
+		obj(schema{"query": str(""), "max": schema{"type": "integer", "minimum": 1, "maximum": 20}}, "query")),
 	tool("list_meetings", "ประชุมใน Google Calendar ช่วงวันที่ พร้อมผู้เข้าร่วม (ใช้หาอีเมลผู้เข้าประชุมเพื่อส่ง minute)", obj(schema{"date_from": str(""), "date_to": str(""), "query": str("")}, "date_from")),
 	tool("send_email", `ส่งอีเมลจาก Gmail บริษัทของผู้ใช้ เช่น minute ประชุม รายงาน แจ้งลูกค้า (ต้องยืนยันก่อน). body เขียนแบบข้อความธรรมดา ขึ้นบรรทัดใหม่ได้ ใช้ "- " สำหรับรายการ`, obj(schema{
 		"to": schema{"type": "array", "items": schema{"type": "string"}, "minItems": 1}, "cc": strArray,
