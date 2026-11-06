@@ -86,6 +86,20 @@ var coreTools = []port.ToolDef{
 		"move_to_current_cycle": boolean,
 		"module":                str("ชื่อ module ที่จะใส่งานนี้เข้าไป"),
 	}, "key")),
+	tool("create_project", "สร้างโปรเจกต์ใหม่ในระบบจัดการงาน (ต้องยืนยันก่อน) ผู้ใช้เป็น Admin และเพิ่มสมาชิกจาก workspace ได้เลย identifier เป็นอักษรอังกฤษ/ตัวเลขไม่เกิน 12 ตัว ถ้าผู้ใช้ไม่บอกให้คิดจากชื่อ",
+		obj(schema{
+			"name":        str(""),
+			"identifier":  str("เช่น PEA3"),
+			"description": str(""),
+			"members":     schema{"type": "array", "items": str("ชื่อ ชื่อเล่น หรืออีเมล")},
+			"role":        str("member (ค่าเริ่มต้น), admin หรือ guest"),
+		}, "name")),
+	tool("add_project_members", "เพิ่มคนใน workspace เข้าโปรเจกต์ (ต้องยืนยันก่อน) ถ้าระบบไม่ยอมให้เพิ่มผ่าน API จะได้ลิงก์ให้ผู้ใช้กดเพิ่มเอง",
+		coreObj(schema{
+			"project": coreProject,
+			"members": schema{"type": "array", "items": str("ชื่อ ชื่อเล่น หรืออีเมล")},
+			"role":    str("member (ค่าเริ่มต้น), admin หรือ guest"),
+		}, "members")),
 	tool("create_cycle", "สร้าง sprint (cycle) ใหม่ในโปรเจกต์ (ต้องยืนยันก่อน) และย้ายงานที่ระบุเข้าไปได้ วันที่ใช้รูปแบบ YYYY-MM-DD ถ้าผู้ใช้ไม่บอกชื่อ ให้ตั้งตามลำดับ sprint เดิม เช่น Sprint 5",
 		coreObj(schema{
 			"project":     coreProject,
@@ -164,7 +178,7 @@ var featureTools = []port.ToolDef{
 	tool("settings_link", "ลิงก์หน้าตั้งค่าบนเว็บ (การเชื่อมต่อ เปลี่ยนบัญชี ชื่อเล่น การแจ้งเตือน)", obj(schema{})),
 }
 
-var writeTools = []string{"create_work_items", "update_work_item", "create_cycle", "add_comment",
+var writeTools = []string{"create_work_items", "update_work_item", "create_cycle", "create_project", "add_project_members", "add_comment",
 	"log_risk", "update_record", "log_change_request", "set_milestone", "set_budget", "log_effort", "schedule_meeting", "send_email", "save_to_notion", "nudge_stale"}
 
 func (a *App) initTools() {

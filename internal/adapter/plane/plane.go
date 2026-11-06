@@ -266,24 +266,29 @@ func (c *Client) Members(ctx context.Context, projectID string) ([]domain.Member
 		if err != nil {
 			return nil, err
 		}
-		out := make([]domain.Member, 0, len(raw))
-		for _, r := range raw {
-			// Some versions wrap the user in `member`.
-			var w struct {
-				Member json.RawMessage `json:"member"`
-			}
-			_ = json.Unmarshal(r, &w)
-			src := r
-			if t := bytes.TrimSpace(w.Member); len(t) > 0 && t[0] == '{' {
-				src = t
-			}
-			var m domain.Member
-			if json.Unmarshal(src, &m) == nil {
-				out = append(out, m)
-			}
-		}
-		return out, nil
+		return decodeMembers(raw), nil
 	})
+}
+
+// decodeMembers reads member rows; some versions wrap the user in `member`.
+func decodeMembers(raw []json.RawMessage) []domain.Member {
+	out := make([]domain.Member, 0, len(raw))
+	for _, r := range raw {
+		// Some versions wrap the user in `member`.
+		var w struct {
+			Member json.RawMessage `json:"member"`
+		}
+		_ = json.Unmarshal(r, &w)
+		src := r
+		if t := bytes.TrimSpace(w.Member); len(t) > 0 && t[0] == '{' {
+			src = t
+		}
+		var m domain.Member
+		if json.Unmarshal(src, &m) == nil && m.ID != "" {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func (c *Client) Labels(ctx context.Context, projectID string) ([]domain.Label, error) {
@@ -418,6 +423,41 @@ func (c *Client) AddToCycle(ctx context.Context, projectID, cycleID string, item
 	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/cycles/"+cycleID+"/cycle-issues/", map[string]any{"issues": itemIDs}, nil)
 	c.invalidate("cycleitems:" + projectID + ":" + cycleID)
 	return err
+}
+
+// NewProject creates a project; Plane makes the token's user its admin.
+func (c *Client) NewProject(ctx context.Context, in domain.ProjectWrite) (domain.Project, error) {
+	body := map[string]any{"name": in.Name, "identifier": in.Identifier}
+	if in.Description != "" {
+		body["description"] = in.Description
+	}
+	var out domain.Project
+	err := c.request(ctx, http.MethodPost, c.base+"/projects/", body, &out)
+	c.invalidate("projects")
+	return out, err
+}
+
+// WorkspaceMembers lists everyone in the workspace.
+func (c *Client) WorkspaceMembers(ctx context.Context) ([]domain.Member, error) {
+	return cachedCall(c, "wsmembers", 10*time.Minute, func() ([]domain.Member, error) {
+		raw, err := c.listAll(ctx, "/members/", nil)
+		if err != nil {
+			return nil, err
+		}
+		return decodeMembers(raw), nil
+	})
+}
+
+// AddProjectMember adds a workspace member to a project. Not every Plane version allows this
+// through the API; callers fall back to MembersURL.
+func (c *Client) AddProjectMember(ctx context.Context, projectID, memberID string, role int) error {
+	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/project-members/", map[string]any{"member": memberID, "role": role}, nil)
+	c.invalidate("members:" + projectID)
+	return err
+}
+
+func (c *Client) MembersURL(p domain.Project) string {
+	return c.baseURL + "/" + c.workspace + "/projects/" + p.ID + "/settings/members"
 }
 
 // CreateCycle creates a cycle owned by the token's user.

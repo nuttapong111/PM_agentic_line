@@ -71,6 +71,11 @@ func newMockPlane(t *testing.T, data map[string]any) *mockPlane {
 		}
 		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/v1/workspaces/ws"), "/api/v1")
 		if r.Method == http.MethodPost || r.Method == http.MethodPatch {
+			if _, deny := m.data["DENY "+r.Method+" "+key]; deny {
+				w.WriteHeader(405)
+				io.WriteString(w, `{"detail":"Method not allowed"}`)
+				return
+			}
 			m.mu.Lock()
 			m.posts = append(m.posts, r.Method+" "+key)
 			if strings.HasSuffix(key, "/comments/") {
@@ -404,6 +409,41 @@ func TestImageFollowsPreviousRequest(t *testing.T) {
 	e.app.HandleText(ctx, "สร้างงวดงานจากรูปนี้")
 	e.app.HandleImage(ctx, "aGk=", "image/png", "")
 	c.check("photo after a request follows it", strings.Contains(lastCaption(), "ต่อจากข้อความก่อนหน้า"), lastCaption())
+}
+
+func TestProjectsAndMembers(t *testing.T) {
+	data := metricsData()
+	data["/members/"] = []any{jo{"member": jo{"id": "u1", "display_name": "ton"}}, jo{"member": jo{"id": "u2", "display_name": "may"}}, jo{"member": jo{"id": "u3", "display_name": "golf", "email": "golf@corp.test"}}}
+	e := newEnv(t, data, false)
+	c := checker{t}
+	ctx := context.Background()
+	for _, n := range []string{"create_project", "add_project_members"} {
+		c.check(n+" needs confirm", e.app.IsWriteTool(n))
+	}
+
+	pv, err := e.app.PrepareWrite(ctx, "create_project", json.RawMessage(`{"name":"PEA Phase 3","members":["may","golf@corp.test","nobody","ton"]}`))
+	c.check("project preview: ident from name, 2 members, unknown + self as warnings", err == nil && pv.Plan.Project != nil && pv.Plan.Project.Identifier == "PEAPHASE3" &&
+		len(pv.Plan.Members) == 2 && len(pv.Warnings) == 2, err, pv)
+	_, err = e.app.PrepareWrite(ctx, "create_project", json.RawMessage(`{"name":"X","identifier":"fda"}`))
+	c.check("taken identifier refused", err != nil && strings.Contains(err.Error(), "FDA"), err)
+	if pv.Plan.Project != nil {
+		r, err := e.app.ExecuteWrite(ctx, pv.Plan)
+		e.plane.mu.Lock()
+		posts := strings.Join(e.plane.posts, "|")
+		e.plane.mu.Unlock()
+		c.check("project created and members added", err == nil && strings.Contains(posts, "POST /projects/|") && strings.Count(posts, "/project-members/") == 2 && len(r["added"].([]string)) == 2, err, posts, r)
+	}
+
+	_, err = e.app.PrepareWrite(ctx, "add_project_members", json.RawMessage(`{"project":"FDA","members":["may"]}`))
+	c.check("already a member refused", err != nil && strings.Contains(err.Error(), "อยู่ในโปรเจกต์แล้ว"), err)
+
+	data["DENY POST /projects/p1/project-members/"] = true
+	pv, err = e.app.PrepareWrite(ctx, "add_project_members", json.RawMessage(`{"project":"FDA","members":["golf"],"role":"admin"}`))
+	c.check("add preview admin", err == nil && len(pv.Plan.Members) == 1 && pv.Plan.Members[0].Role == domain.RoleAdmin, err, pv)
+	if err == nil {
+		r, err := e.app.ExecuteWrite(ctx, pv.Plan)
+		c.check("API refusal falls back to members page link", err == nil && r["summary"] == "เพิ่มสมาชิกผ่าน API ไม่ได้" && strings.Contains(toJSON(r["links"]), "/settings/members"), err, r)
+	}
 }
 
 func TestNeedProjectPicker(t *testing.T) {

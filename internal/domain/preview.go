@@ -36,6 +36,8 @@ const (
 	PlanNotionPage   = "notion_page"
 	PlanComments     = "comments"
 	PlanCycle        = "cycle"
+	PlanProject      = "project"
+	PlanMembers      = "members"
 )
 
 // WritePlan is what runs after the owner confirms. Which fields are used depends on Kind.
@@ -49,6 +51,8 @@ type WritePlan struct {
 	ModuleID *string         `json:"moduleId,omitempty"`
 	Cycle    *CycleWrite     `json:"cycle,omitempty"`
 	ItemIDs  []string        `json:"itemIds,omitempty"`
+	Project  *ProjectWrite   `json:"project,omitempty"`
+	Members  []PlanMember    `json:"members,omitempty"`
 	Items    json.RawMessage `json:"items,omitempty"` // []PlanItem (create) or []PlanTarget (comments)
 	ItemID   string          `json:"itemId,omitempty"`
 	Key      string          `json:"key,omitempty"`
@@ -150,4 +154,11 @@ func MergePreviews(ps []Preview) Preview {
 	out.Subtitle = Truncate(joinStr(titles, " · "), 120)
 	out.ConfirmLabel = "ยืนยันทั้ง " + itoa(len(ps)) + " รายการ"
 	return out
+}
+
+// PlanMember is a person to add to a project.
+type PlanMember struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role int    `json:"role"`
 }

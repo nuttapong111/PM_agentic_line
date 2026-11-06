@@ -247,6 +247,21 @@ func (p *Provider) UpdateWorkItem(ctx context.Context, proj domain.Project, id s
 // AddToCycle does nothing: the built-in list has no cycles.
 func (p *Provider) AddToCycle(context.Context, string, string, []string) error { return nil }
 
+// NewProject creates a project in the built-in list.
+func (p *Provider) NewProject(ctx context.Context, in domain.ProjectWrite) (domain.Project, error) {
+	return p.CreateProject(ctx, in.Name, in.Identifier)
+}
+
+// WorkspaceMembers are the owner and the nicknames set in Settings.
+func (p *Provider) WorkspaceMembers(ctx context.Context) ([]domain.Member, error) {
+	return p.Members(ctx, "")
+}
+
+// AddProjectMember does nothing: every built-in project is shared by the same people.
+func (p *Provider) AddProjectMember(context.Context, string, string, int) error { return nil }
+
+func (p *Provider) MembersURL(domain.Project) string { return "" }
+
 // CreateCycle is not available: the built-in list has no cycles.
 func (p *Provider) CreateCycle(context.Context, string, domain.CycleWrite) (domain.Cycle, error) {
 	return domain.Cycle{}, domain.UserError("ระบบงานในตัวของบอทไม่มี sprint ต้องเชื่อม Plane ก่อน")

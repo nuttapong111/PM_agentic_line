@@ -109,35 +109,58 @@ func (a *App) ResolveMember(ctx context.Context, projectID, who string) (*domain
 		}
 		return &me, nil
 	}
-	target := who
-	if v, ok := a.Store.Nicknames()[who]; ok {
-		target = v
-	}
-	q := domain.Norm(target)
-	for i, m := range members {
-		if m.Email != "" && domain.Norm(m.Email) == q {
-			return &members[i], nil
-		}
-	}
-	for i, m := range members {
-		for _, n := range []string{m.DisplayName, m.FirstName, m.FirstName + m.LastName} {
-			if n != "" && domain.Norm(n) == q {
-				return &members[i], nil
-			}
-		}
-	}
-	for i, m := range members {
-		for _, n := range []string{m.DisplayName, m.FirstName, m.Email} {
-			if n != "" && strings.Contains(domain.Norm(n), q) {
-				return &members[i], nil
-			}
-		}
+	if m := a.matchMember(members, who); m != nil {
+		return m, nil
 	}
 	names := make([]string, len(members))
 	for i := range members {
 		names[i] = members[i].Name()
 	}
 	return nil, domain.UserError(fmt.Sprintf(`ไม่พบสมาชิกชื่อ "%s" ในโปรเจกต์ สมาชิกที่มี: %s (ตั้งชื่อเล่นได้ที่หน้าตั้งค่า > ทีมและชื่อเล่น)`, who, strings.Join(names, ", ")))
+}
+
+// ResolveWorkspaceMember finds a person anywhere in the workspace (for adding them to a project).
+func (a *App) ResolveWorkspaceMember(ctx context.Context, who string) (domain.Member, error) {
+	members, err := a.tasks().WorkspaceMembers(ctx)
+	if err != nil {
+		return domain.Member{}, err
+	}
+	if m := a.matchMember(members, who); m != nil {
+		return *m, nil
+	}
+	return domain.Member{}, domain.UserError(fmt.Sprintf(`ไม่พบ "%s" ใน workspace ของระบบจัดการงาน ต้องเชิญเข้า workspace ก่อน`, who))
+}
+
+// matchMember matches a nickname, email or name: exact first, then partial.
+func (a *App) matchMember(members []domain.Member, who string) *domain.Member {
+	target := who
+	if v, ok := a.Store.Nicknames()[who]; ok {
+		target = v
+	}
+	q := domain.Norm(target)
+	if q == "" {
+		return nil
+	}
+	for i, m := range members {
+		if m.Email != "" && domain.Norm(m.Email) == q {
+			return &members[i]
+		}
+	}
+	for i, m := range members {
+		for _, n := range []string{m.DisplayName, m.FirstName, m.FirstName + m.LastName} {
+			if n != "" && domain.Norm(n) == q {
+				return &members[i]
+			}
+		}
+	}
+	for i, m := range members {
+		for _, n := range []string{m.DisplayName, m.FirstName, m.Email} {
+			if n != "" && strings.Contains(domain.Norm(n), q) {
+				return &members[i]
+			}
+		}
+	}
+	return nil
 }
 
 // ResolveEmail gives an email for a person: an address as-is, a nickname mapped to an email, or a member's email.

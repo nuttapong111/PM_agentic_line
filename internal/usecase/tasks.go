@@ -135,6 +135,16 @@ func (NoProvider) UpdateWorkItem(context.Context, domain.Project, string, domain
 func (NoProvider) AddToCycle(context.Context, string, string, []string) error {
 	return domain.ErrTaskNotConnected
 }
+func (NoProvider) NewProject(context.Context, domain.ProjectWrite) (domain.Project, error) {
+	return domain.Project{}, domain.ErrTaskNotConnected
+}
+func (NoProvider) WorkspaceMembers(context.Context) ([]domain.Member, error) {
+	return nil, domain.ErrTaskNotConnected
+}
+func (NoProvider) AddProjectMember(context.Context, string, string, int) error {
+	return domain.ErrTaskNotConnected
+}
+func (NoProvider) MembersURL(domain.Project) string { return "" }
 func (NoProvider) CreateCycle(context.Context, string, domain.CycleWrite) (domain.Cycle, error) {
 	return domain.Cycle{}, domain.ErrTaskNotConnected
 }

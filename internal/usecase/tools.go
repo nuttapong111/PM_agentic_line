@@ -280,6 +280,10 @@ func (a *App) PrepareWrite(ctx context.Context, name string, raw json.RawMessage
 		return a.prepareUpdate(ctx, raw)
 	case "create_cycle":
 		return a.prepareCycle(ctx, raw)
+	case "create_project":
+		return a.prepareProject(ctx, raw)
+	case "add_project_members":
+		return a.prepareMembers(ctx, raw)
 	case "add_comment":
 		var in struct{ Key, Text string }
 		if err := decode(raw, &in); err != nil {
@@ -628,6 +632,8 @@ type itemRef struct {
 // ExecuteWrite runs a confirmed plan.
 func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, error) {
 	switch plan.Kind {
+	case domain.PlanProject, domain.PlanMembers:
+		return a.executeProject(ctx, plan)
 	case domain.PlanCreate, domain.PlanUpdate, domain.PlanComment, domain.PlanCycle:
 	default:
 		return a.executeFeature(ctx, plan)

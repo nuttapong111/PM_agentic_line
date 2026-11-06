@@ -42,6 +42,11 @@ type TaskProvider interface {
 	WorkItemByKey(ctx context.Context, key string) (domain.WorkItem, error)
 	CreateWorkItem(ctx context.Context, p domain.Project, body domain.WorkItemWrite) (domain.WorkItem, error)
 	UpdateWorkItem(ctx context.Context, p domain.Project, id string, body domain.WorkItemWrite) (domain.WorkItem, error)
+	NewProject(ctx context.Context, in domain.ProjectWrite) (domain.Project, error)
+	WorkspaceMembers(ctx context.Context) ([]domain.Member, error)
+	AddProjectMember(ctx context.Context, projectID, memberID string, role int) error
+	// MembersURL is the project's member settings page, for adding people by hand.
+	MembersURL(p domain.Project) string
 	CreateCycle(ctx context.Context, projectID string, c domain.CycleWrite) (domain.Cycle, error)
 	AddToCycle(ctx context.Context, projectID, cycleID string, itemIDs []string) error
 	AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error

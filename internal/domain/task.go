@@ -71,6 +71,20 @@ type Cycle struct {
 	Status    string  `json:"status,omitempty"`
 }
 
+// ProjectWrite is the body of a new project.
+type ProjectWrite struct {
+	Name        string `json:"name"`
+	Identifier  string `json:"identifier"`
+	Description string `json:"description,omitempty"`
+}
+
+// Project member roles (Plane's numbers).
+const (
+	RoleAdmin  = 20
+	RoleMember = 15
+	RoleGuest  = 5
+)
+
 // CycleWrite is the body of a new cycle (sprint). Dates are YYYY-MM-DD.
 type CycleWrite struct {
 	Name        string `json:"name"`
