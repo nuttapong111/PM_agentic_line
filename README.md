@@ -40,15 +40,30 @@
 5. ทักบอทใน LINE ครั้งแรก บอทจะตอบ user ID กลับมา → ใส่ `OWNER_LINE_USER_ID` แล้ว redeploy
 6. (ทางเลือก) Plane → Workspace settings → Webhooks → `https://<โดเมน>/plane/webhook` แล้วใส่ secret ที่ `PLANE_WEBHOOK_SECRET`
 
+## โครงสร้างโค้ด (Go, clean architecture)
+```
+cmd/server        จุดเริ่มโปรแกรม: ประกอบทุกส่วนเข้าด้วยกัน, HTTP server, scheduler ทุกนาที
+cmd/richmenu      ติดตั้ง rich menu ใหม่ทันที
+internal/domain   กติกาธุรกิจล้วน ๆ ไม่มี I/O: งาน, metrics, sprint, risk/CR/งวดงาน, วันที่ไทย, state
+internal/port     interface ที่ use case ต้องใช้ (TaskProvider, RecordRepo, LLM, Messenger, GoogleAPI ...)
+internal/usecase  การทำงานของบอท: agent กับ Claude, tools, การ์ดยืนยัน, สรุปเช้า, แจ้งเตือน, หน้าตั้งค่า
+internal/adapter  ตัวเชื่อมภายนอก: plane, builtin, postgres, filestore, google, notion, anthropic, line, crypto
+internal/delivery/httpapi  route ของ LINE webhook, Plane webhook, Dashboard, หน้าตั้งค่า, OAuth
+web/              dashboard.html, settings.html, richmenu.png (ฝังใน binary)
+```
+ทิศทางการพึ่งพา: `delivery → usecase → port ← adapter` และทุกชั้นใช้ `domain` ได้ use case ไม่ import adapter ตรง ๆ
+
 ## คำสั่ง
+ต้องมี Go 1.24 ขึ้นไป
 ```
-npm install
-npm run dev          # รันในเครื่อง
-npm test             # self-test แบบ offline (mock Plane)
-TEST_DATABASE_URL=postgres://... npm test   # ทดสอบส่วน PostgreSQL ด้วย
-npm run typecheck
-npm run richmenu     # ติดตั้ง rich menu ใหม่ทันที
+go run ./cmd/server          # รันในเครื่อง (อ่าน .env ถ้ามี)
+go test ./...                # test แบบ offline (mock Plane / LINE / Claude)
+TEST_DATABASE_URL=postgres://... go test ./...   # ทดสอบส่วน PostgreSQL ด้วย
+go vet ./...
+go run ./cmd/richmenu        # ติดตั้ง rich menu ใหม่ทันที
+docker build -t pm-assistant .   # Railway build จาก Dockerfile นี้
 ```
+ข้อมูลเดิมใช้ต่อได้ทันที: env ชื่อเดิม ตาราง PostgreSQL เดิม และรูปแบบการเข้ารหัสเดิม (ไม่ต้องใส่ token ใหม่)
 
 ## ความปลอดภัย
 - ใช้ได้เฉพาะ `OWNER_LINE_USER_ID` คนอื่นจะได้ข้อความ "ใช้งานส่วนตัว"
@@ -63,4 +78,4 @@ npm run richmenu     # ติดตั้ง rich menu ใหม่ทันท�
 - กำลังคนนับงานละ 1 วัน (ยังไม่ใช้ estimate)
 
 ## รอบถัดไป
-บอทในกลุ่ม LINE, Jira / ClickUp / Linear (เพิ่ม class ที่ implement `TaskProvider` ใน `src/providers/`)
+บอทในกลุ่ม LINE, Jira / ClickUp / Linear (เพิ่ม adapter ที่ implement `port.TaskProvider` ใน `internal/adapter/`)
