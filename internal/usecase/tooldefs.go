@@ -62,6 +62,7 @@ var coreTools = []port.ToolDef{
 		coreObj(schema{
 			"project":              coreProject,
 			"add_to_current_cycle": schema{"type": "boolean", "description": "ค่าเริ่มต้น true"},
+			"module":               str("ชื่อ module ที่จะใส่ทุกงานเข้าไป เว้นได้ (ใส่เฉพาะเมื่อผู้ใช้บอก)"),
 			"items": schema{"type": "array", "minItems": 1, "maxItems": 10, "items": coreObj(schema{
 				"name":         str(""),
 				"description":  str(""),
@@ -74,7 +75,7 @@ var coreTools = []port.ToolDef{
 				"tag":          str("ป้ายสั้นสำหรับการ์ด เช่น BE, FE, QA"),
 			}, "name")},
 		}, "items")),
-	tool("update_work_item", "แก้งานที่มีอยู่ (ต้องยืนยันก่อน): เปลี่ยนชื่อ สถานะ ผู้รับผิดชอบ priority วันที่ ย้ายเข้า cycle ปัจจุบัน", coreObj(schema{
+	tool("update_work_item", "แก้งานที่มีอยู่ (ต้องยืนยันก่อน): เปลี่ยนชื่อ สถานะ ผู้รับผิดชอบ priority วันที่ ย้ายเข้า cycle ปัจจุบัน ใส่เข้า module", coreObj(schema{
 		"key":                   str("รหัสงาน เช่น PEALICENSE-27"),
 		"name":                  str(""),
 		"state":                 str("ชื่อสถานะ เช่น In Progress, Done, Blocked"),
@@ -83,6 +84,7 @@ var coreTools = []port.ToolDef{
 		"start_date":            str(""),
 		"target_date":           str(""),
 		"move_to_current_cycle": boolean,
+		"module":                str("ชื่อ module ที่จะใส่งานนี้เข้าไป"),
 	}, "key")),
 	tool("add_comment", "เพิ่มคอมเมนต์ในงาน (ต้องยืนยันก่อน)", coreObj(schema{"key": str(""), "text": str("")}, "key", "text")),
 	tool("dashboard_link", "ลิงก์หน้า dashboard บนเว็บ", coreObj(schema{"project": coreProject})),

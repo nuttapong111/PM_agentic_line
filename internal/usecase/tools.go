@@ -307,6 +307,7 @@ func (a *App) prepareCreate(ctx context.Context, raw json.RawMessage) (domain.Pr
 	var in struct {
 		Project           string
 		AddToCurrentCycle *bool `json:"add_to_current_cycle"`
+		Module            string
 		Items             []struct {
 			Name        string
 			Description string
@@ -333,6 +334,14 @@ func (a *App) prepareCreate(ctx context.Context, raw json.RawMessage) (domain.Pr
 	var cycle *domain.Cycle
 	if in.AddToCurrentCycle == nil || *in.AddToCurrentCycle {
 		cycle = a.currentCycle(ctx, p.ID)
+	}
+	var mod *domain.Module
+	if in.Module != "" {
+		m, err := a.ResolveModule(ctx, p.ID, in.Module)
+		if err != nil {
+			return domain.Preview{}, err
+		}
+		mod = &m
 	}
 	warnings := []string{}
 	items := []domain.PlanItem{}
@@ -420,10 +429,15 @@ func (a *App) prepareCreate(ctx context.Context, raw json.RawMessage) (domain.Pr
 	if def != nil {
 		defName = def.Name
 	}
+	modName := ""
+	var moduleID *string
+	if mod != nil {
+		modName, moduleID = "Module "+mod.Name, &mod.ID
+	}
 	return domain.Preview{
-		Title: title, Subtitle: joinNonEmpty(" · ", p.Name, cycleName, defName), Lines: lines, Warnings: warnings,
+		Title: title, Subtitle: joinNonEmpty(" · ", p.Name, cycleName, modName, defName), Lines: lines, Warnings: warnings,
 		ConfirmLabel: fmt.Sprintf("ยืนยัน สร้าง %d งาน", len(items)),
-		Plan:         domain.WritePlan{Kind: domain.PlanCreate, ProjectID: &p.ID, CycleID: cycleID, Items: domain.MustJSON(items)},
+		Plan:         domain.WritePlan{Kind: domain.PlanCreate, ProjectID: &p.ID, CycleID: cycleID, ModuleID: moduleID, Items: domain.MustJSON(items)},
 	}, nil
 }
 
@@ -433,6 +447,7 @@ func (a *App) prepareUpdate(ctx context.Context, raw json.RawMessage) (domain.Pr
 		StartDate                            string `json:"start_date"`
 		TargetDate                           string `json:"target_date"`
 		MoveToCurrentCycle                   bool   `json:"move_to_current_cycle"`
+		Module                               string
 	}
 	if err := decode(raw, &in); err != nil {
 		return domain.Preview{}, err
@@ -506,13 +521,22 @@ func (a *App) prepareUpdate(ctx context.Context, raw json.RawMessage) (domain.Pr
 		cycleID = &c.ID
 		lines = append(lines, domain.PreviewLine{Text: "Cycle", Sub: "ย้ายเข้า " + c.Name})
 	}
+	var moduleID *string
+	if in.Module != "" {
+		m, err := a.ResolveModule(ctx, p.ID, in.Module)
+		if err != nil {
+			return domain.Preview{}, err
+		}
+		moduleID = &m.ID
+		lines = append(lines, domain.PreviewLine{Text: "Module", Sub: "ใส่เข้า " + m.Name})
+	}
 	if len(lines) == 0 {
 		return domain.Preview{}, domain.UserError("ไม่ได้ระบุว่าจะแก้อะไร")
 	}
 	return domain.Preview{
 		Title: it.Key + " " + it.Name, Subtitle: fmt.Sprintf("%s · แก้ไข %d รายการ", p.Name, len(lines)), Lines: lines, Warnings: []string{},
 		ConfirmLabel: "ยืนยัน แก้ไข",
-		Plan:         domain.WritePlan{Kind: domain.PlanUpdate, ProjectID: &p.ID, ItemID: it.ID, Key: it.Key, Body: &body, CycleID: cycleID},
+		Plan:         domain.WritePlan{Kind: domain.PlanUpdate, ProjectID: &p.ID, ItemID: it.ID, Key: it.Key, Body: &body, CycleID: cycleID, ModuleID: moduleID},
 	}, nil
 }
 
@@ -563,6 +587,15 @@ func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, 
 				return nil, err
 			}
 		}
+		if plan.ModuleID != nil {
+			ids := make([]string, len(created))
+			for i, c := range created {
+				ids[i] = c.ID
+			}
+			if err := tp.AddToModule(ctx, project.ID, *plan.ModuleID, ids); err != nil {
+				return nil, err
+			}
+		}
 		refs := []itemRef{}
 		for _, c := range created {
 			refs = append(refs, itemRef{c.Key, c.Name, tp.ItemURL(c)})
@@ -579,6 +612,11 @@ func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, 
 		}
 		if plan.CycleID != nil {
 			if err := tp.AddToCycle(ctx, project.ID, *plan.CycleID, []string{plan.ItemID}); err != nil {
+				return nil, err
+			}
+		}
+		if plan.ModuleID != nil {
+			if err := tp.AddToModule(ctx, project.ID, *plan.ModuleID, []string{plan.ItemID}); err != nil {
 				return nil, err
 			}
 		}

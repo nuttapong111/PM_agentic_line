@@ -44,12 +44,13 @@ type WritePlan struct {
 	ProjectID *string `json:"projectId,omitempty"`
 
 	// create / update / comment
-	CycleID *string         `json:"cycleId,omitempty"`
-	Items   json.RawMessage `json:"items,omitempty"` // []PlanItem (create) or []PlanTarget (comments)
-	ItemID  string          `json:"itemId,omitempty"`
-	Key     string          `json:"key,omitempty"`
-	Body    *WorkItemWrite  `json:"body,omitempty"`
-	HTML    string          `json:"html,omitempty"`
+	CycleID  *string         `json:"cycleId,omitempty"`
+	ModuleID *string         `json:"moduleId,omitempty"`
+	Items    json.RawMessage `json:"items,omitempty"` // []PlanItem (create) or []PlanTarget (comments)
+	ItemID   string          `json:"itemId,omitempty"`
+	Key      string          `json:"key,omitempty"`
+	Body     *WorkItemWrite  `json:"body,omitempty"`
+	HTML     string          `json:"html,omitempty"`
 
 	// record_add / record_update
 	RecKind   RecordKind      `json:"recKind,omitempty"`

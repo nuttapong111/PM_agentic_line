@@ -247,6 +247,9 @@ func (p *Provider) UpdateWorkItem(ctx context.Context, proj domain.Project, id s
 // AddToCycle does nothing: the built-in list has no cycles.
 func (p *Provider) AddToCycle(context.Context, string, string, []string) error { return nil }
 
+// AddToModule does nothing: the built-in list has no modules.
+func (p *Provider) AddToModule(context.Context, string, string, []string) error { return nil }
+
 func (p *Provider) AddComment(ctx context.Context, _ domain.Project, itemID, html string) error {
 	if _, err := p.pool.Exec(ctx, `insert into bt_comments (item_id, html) values ($1, $2)`, itemID, html); err != nil {
 		return err

@@ -420,6 +420,13 @@ func (c *Client) AddToCycle(ctx context.Context, projectID, cycleID string, item
 	return err
 }
 
+// AddToModule puts work items into a module (Plane keeps the item's other modules).
+func (c *Client) AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error {
+	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", map[string]any{"issues": itemIDs}, nil)
+	c.invalidate("moduleitems:" + projectID + ":" + moduleID)
+	return err
+}
+
 func (c *Client) AddComment(ctx context.Context, p domain.Project, itemID, html string) error {
 	path, err := c.items(ctx)
 	if err != nil {

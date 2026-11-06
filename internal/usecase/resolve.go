@@ -185,6 +185,33 @@ func (a *App) ResolveState(ctx context.Context, projectID, name string) (domain.
 	return domain.State{}, domain.UserError(fmt.Sprintf(`ไม่พบสถานะ "%s" สถานะที่มี: %s`, name, strings.Join(names, ", ")))
 }
 
+// ResolveModule finds a module by exact, then partial name.
+func (a *App) ResolveModule(ctx context.Context, projectID, name string) (domain.Module, error) {
+	mods, err := a.tasks().Modules(ctx, projectID)
+	if err != nil {
+		return domain.Module{}, err
+	}
+	q := domain.Norm(name)
+	for _, m := range mods {
+		if domain.Norm(m.Name) == q {
+			return m, nil
+		}
+	}
+	for _, m := range mods {
+		if n := domain.Norm(m.Name); strings.Contains(n, q) || (n != "" && strings.Contains(q, n)) {
+			return m, nil
+		}
+	}
+	if len(mods) == 0 {
+		return domain.Module{}, domain.UserError("โปรเจกต์นี้ยังไม่มี module")
+	}
+	names := make([]string, len(mods))
+	for i, m := range mods {
+		names[i] = m.Name
+	}
+	return domain.Module{}, domain.UserError(fmt.Sprintf(`ไม่พบ module "%s" module ที่มี: %s`, name, strings.Join(names, ", ")))
+}
+
 func isNeedProject(err error) bool {
 	var u *domain.UserFacingError
 	return errors.As(err, &u) && strings.HasPrefix(u.Msg, needProjectPrefix)

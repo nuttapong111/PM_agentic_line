@@ -58,6 +58,7 @@ type mockPlane struct {
 	mu       sync.Mutex
 	data     map[string]any
 	comments []string
+	posts    []string
 }
 
 func newMockPlane(t *testing.T, data map[string]any) *mockPlane {
@@ -71,6 +72,7 @@ func newMockPlane(t *testing.T, data map[string]any) *mockPlane {
 		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/v1/workspaces/ws"), "/api/v1")
 		if r.Method == http.MethodPost || r.Method == http.MethodPatch {
 			m.mu.Lock()
+			m.posts = append(m.posts, r.Method+" "+key)
 			if strings.HasSuffix(key, "/comments/") {
 				m.comments = append(m.comments, key)
 			}
@@ -304,6 +306,45 @@ func TestAgentConfirmFlow(t *testing.T) {
 	c.check("tool_result appended for Claude", last.Role == "user" && last.Content[0]["type"] == "tool_result" && last.Content[0]["tool_use_id"] == "tu1", last)
 	c.check("expired card refused", strings.Contains(toJSON(e.app.HandleMenu(ctx, "confirm:nope")), "หมดอายุ"))
 	c.check("reset command", strings.Contains(toJSON(e.app.HandleText(ctx, "reset")), "เริ่มบทสนทนาใหม่") && len(e.app.Store.Snapshot().Conversation.Messages) == 0)
+}
+
+func TestModuleAssignment(t *testing.T) {
+	data := metricsData()
+	data["/work-items/FDA-3/"] = jo{"id": "i3", "name": "UI", "sequence_id": 3, "state": "s-todo", "project": "p1", "assignees": []string{}}
+	e := newEnv(t, data, false)
+	c := checker{t}
+	ctx := context.Background()
+	const addPath = "POST /projects/p1/modules/m1/module-issues/"
+	posted := func() bool {
+		e.plane.mu.Lock()
+		defer e.plane.mu.Unlock()
+		for _, p := range e.plane.posts {
+			if p == addPath {
+				return true
+			}
+		}
+		return false
+	}
+
+	pv, err := e.app.prepareUpdate(ctx, json.RawMessage(`{"key":"FDA-3","module":"login"}`))
+	c.check("update preview resolves module", err == nil && pv.Plan.ModuleID != nil && *pv.Plan.ModuleID == "m1" && strings.Contains(toJSON(pv.Lines), "Login"), err, pv)
+	if err == nil {
+		_, err = e.app.ExecuteWrite(ctx, pv.Plan)
+		c.check("update adds item to module", err == nil && posted(), err, e.plane.posts)
+	}
+
+	_, err = e.app.prepareUpdate(ctx, json.RawMessage(`{"key":"FDA-3","module":"Payment"}`))
+	c.check("unknown module lists choices", err != nil && strings.Contains(err.Error(), "Login"), err)
+
+	e.plane.mu.Lock()
+	e.plane.posts = nil
+	e.plane.mu.Unlock()
+	pv, err = e.app.prepareCreate(ctx, json.RawMessage(`{"project":"FDA","module":"Login","items":[{"name":"หน้า reset password"}]}`))
+	c.check("create preview shows module", err == nil && pv.Plan.ModuleID != nil && strings.Contains(pv.Subtitle, "Module Login"), err, pv)
+	if err == nil {
+		_, err = e.app.ExecuteWrite(ctx, pv.Plan)
+		c.check("create adds items to module", err == nil && posted(), err, e.plane.posts)
+	}
 }
 
 func TestNeedProjectPicker(t *testing.T) {
