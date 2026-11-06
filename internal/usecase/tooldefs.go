@@ -86,6 +86,15 @@ var coreTools = []port.ToolDef{
 		"move_to_current_cycle": boolean,
 		"module":                str("ชื่อ module ที่จะใส่งานนี้เข้าไป"),
 	}, "key")),
+	tool("create_cycle", "สร้าง sprint (cycle) ใหม่ในโปรเจกต์ (ต้องยืนยันก่อน) และย้ายงานที่ระบุเข้าไปได้ วันที่ใช้รูปแบบ YYYY-MM-DD ถ้าผู้ใช้ไม่บอกชื่อ ให้ตั้งตามลำดับ sprint เดิม เช่น Sprint 5",
+		coreObj(schema{
+			"project":     coreProject,
+			"name":        str(""),
+			"description": str("เป้าหมายของ sprint เว้นได้"),
+			"start_date":  str(""),
+			"end_date":    str(""),
+			"item_keys":   schema{"type": "array", "items": str("รหัสงาน เช่น PEALICENSE-27")},
+		}, "name", "start_date", "end_date")),
 	tool("add_comment", "เพิ่มคอมเมนต์ในงาน (ต้องยืนยันก่อน)", coreObj(schema{"key": str(""), "text": str("")}, "key", "text")),
 	tool("dashboard_link", "ลิงก์หน้า dashboard บนเว็บ", coreObj(schema{"project": coreProject})),
 }
@@ -153,7 +162,7 @@ var featureTools = []port.ToolDef{
 	tool("settings_link", "ลิงก์หน้าตั้งค่าบนเว็บ (การเชื่อมต่อ เปลี่ยนบัญชี ชื่อเล่น การแจ้งเตือน)", obj(schema{})),
 }
 
-var writeTools = []string{"create_work_items", "update_work_item", "add_comment",
+var writeTools = []string{"create_work_items", "update_work_item", "create_cycle", "add_comment",
 	"log_risk", "update_record", "log_change_request", "set_milestone", "set_budget", "log_effort", "schedule_meeting", "send_email", "save_to_notion", "nudge_stale"}
 
 func (a *App) initTools() {

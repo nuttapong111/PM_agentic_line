@@ -135,6 +135,9 @@ func (NoProvider) UpdateWorkItem(context.Context, domain.Project, string, domain
 func (NoProvider) AddToCycle(context.Context, string, string, []string) error {
 	return domain.ErrTaskNotConnected
 }
+func (NoProvider) CreateCycle(context.Context, string, domain.CycleWrite) (domain.Cycle, error) {
+	return domain.Cycle{}, domain.ErrTaskNotConnected
+}
 func (NoProvider) AddToModule(context.Context, string, string, []string) error {
 	return domain.ErrTaskNotConnected
 }

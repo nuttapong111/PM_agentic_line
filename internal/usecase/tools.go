@@ -278,6 +278,8 @@ func (a *App) PrepareWrite(ctx context.Context, name string, raw json.RawMessage
 		return a.prepareCreate(ctx, raw)
 	case "update_work_item":
 		return a.prepareUpdate(ctx, raw)
+	case "create_cycle":
+		return a.prepareCycle(ctx, raw)
 	case "add_comment":
 		var in struct{ Key, Text string }
 		if err := decode(raw, &in); err != nil {
@@ -540,6 +542,80 @@ func (a *App) prepareUpdate(ctx context.Context, raw json.RawMessage) (domain.Pr
 	}, nil
 }
 
+func (a *App) prepareCycle(ctx context.Context, raw json.RawMessage) (domain.Preview, error) {
+	var in struct {
+		Project, Name, Description string
+		StartDate                  string   `json:"start_date"`
+		EndDate                    string   `json:"end_date"`
+		ItemKeys                   []string `json:"item_keys"`
+	}
+	if err := decode(raw, &in); err != nil {
+		return domain.Preview{}, err
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		return domain.Preview{}, domain.UserError("ต้องมีชื่อ sprint")
+	}
+	if err := domain.CheckDate(&in.StartDate, "start_date"); err != nil {
+		return domain.Preview{}, err
+	}
+	if err := domain.CheckDate(&in.EndDate, "end_date"); err != nil {
+		return domain.Preview{}, err
+	}
+	if in.StartDate == "" || in.EndDate == "" {
+		return domain.Preview{}, domain.UserError("ต้องระบุวันเริ่มและวันจบของ sprint")
+	}
+	if in.EndDate < in.StartDate {
+		return domain.Preview{}, domain.UserError("วันจบ sprint ต้องไม่ก่อนวันเริ่ม")
+	}
+	p, err := a.ResolveProject(ctx, in.Project)
+	if err != nil {
+		return domain.Preview{}, err
+	}
+	tp := a.tasks()
+	warnings := []string{}
+	cycles, err := tp.Cycles(ctx, p.ID)
+	if err != nil {
+		return domain.Preview{}, err
+	}
+	for _, c := range cycles {
+		if strings.EqualFold(strings.TrimSpace(c.Name), in.Name) {
+			return domain.Preview{}, domain.UserError(fmt.Sprintf(`มี sprint ชื่อ "%s" อยู่แล้ว`, c.Name))
+		}
+		if c.StartDate == nil || c.EndDate == nil {
+			continue
+		}
+		cs, ce := (*c.StartDate)[:min(10, len(*c.StartDate))], (*c.EndDate)[:min(10, len(*c.EndDate))]
+		if cs <= in.EndDate && in.StartDate <= ce {
+			warnings = append(warnings, fmt.Sprintf("ช่วงวันที่ทับกับ %s (%s – %s) Plane อาจไม่ยอมให้สร้าง", c.Name, domain.ThaiDate(cs, true), domain.ThaiDate(ce, true)))
+		}
+	}
+	lines := []domain.PreviewLine{
+		{Text: "ช่วงเวลา", Sub: domain.ThaiDate(in.StartDate, true) + " – " + domain.ThaiDate(in.EndDate, true)},
+	}
+	if in.Description != "" {
+		lines = append(lines, domain.PreviewLine{Text: "เป้าหมาย", Sub: cut(in.Description, 200)})
+	}
+	ids := []string{}
+	for _, k := range in.ItemKeys {
+		it, err := tp.WorkItemByKey(ctx, k)
+		if err != nil {
+			return domain.Preview{}, domain.UserError("ไม่พบงาน " + k)
+		}
+		if it.ProjectID != "" && it.ProjectID != p.ID {
+			return domain.Preview{}, domain.UserError(fmt.Sprintf("%s ไม่ได้อยู่ในโปรเจกต์ %s", it.Key, p.Name))
+		}
+		ids = append(ids, it.ID)
+		lines = append(lines, domain.PreviewLine{Tag: "ย้ายเข้า", Text: it.Key + " " + it.Name})
+	}
+	return domain.Preview{
+		Title: "Sprint ใหม่: " + in.Name, Subtitle: p.Name, Lines: lines, Warnings: warnings,
+		ConfirmLabel: "ยืนยัน สร้าง sprint",
+		Plan: domain.WritePlan{Kind: domain.PlanCycle, ProjectID: &p.ID, ItemIDs: ids,
+			Cycle: &domain.CycleWrite{Name: in.Name, Description: in.Description, StartDate: in.StartDate, EndDate: in.EndDate}},
+	}, nil
+}
+
 // Result is what a confirmed write returns: shown to the model and turned into result links.
 type Result = map[string]any
 
@@ -552,7 +628,7 @@ type itemRef struct {
 // ExecuteWrite runs a confirmed plan.
 func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, error) {
 	switch plan.Kind {
-	case domain.PlanCreate, domain.PlanUpdate, domain.PlanComment:
+	case domain.PlanCreate, domain.PlanUpdate, domain.PlanComment, domain.PlanCycle:
 	default:
 		return a.executeFeature(ctx, plan)
 	}
@@ -565,6 +641,24 @@ func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, 
 		return nil, &domain.StatusError{Status: 404, Msg: "project not found"}
 	}
 	switch plan.Kind {
+	case domain.PlanCycle:
+		if plan.Cycle == nil {
+			return nil, fmt.Errorf("cycle plan without cycle")
+		}
+		cy, err := tp.CreateCycle(ctx, project.ID, *plan.Cycle)
+		if err != nil {
+			return nil, err
+		}
+		if len(plan.ItemIDs) > 0 && cy.ID != "" {
+			if err := tp.AddToCycle(ctx, project.ID, cy.ID, plan.ItemIDs); err != nil {
+				return nil, fmt.Errorf("สร้าง sprint %s แล้ว แต่ย้ายงานเข้าไม่สำเร็จ: %w", cy.Name, err)
+			}
+		}
+		summary := "สร้าง sprint " + plan.Cycle.Name
+		if n := len(plan.ItemIDs); n > 0 {
+			summary += fmt.Sprintf(" และย้าย %d งานเข้า", n)
+		}
+		return Result{"summary": summary, "cycle": plan.Cycle.Name, "links": []domain.Link{{Label: "เปิดโปรเจกต์ใน Plane", URL: tp.ProjectURL(*project)}}}, nil
 	case domain.PlanCreate:
 		created := []domain.WorkItem{}
 		for _, it := range plan.CreateItems() {

@@ -347,6 +347,32 @@ func TestModuleAssignment(t *testing.T) {
 	}
 }
 
+func TestCreateCycle(t *testing.T) {
+	data := metricsData()
+	data["/work-items/FDA-3/"] = jo{"id": "i3", "name": "UI", "sequence_id": 3, "state": "s-todo", "project": "p1", "assignees": []string{}}
+	e := newEnv(t, data, false)
+	c := checker{t}
+	ctx := context.Background()
+	c.check("create_cycle needs confirm", e.app.IsWriteTool("create_cycle"))
+
+	pv, err := e.app.PrepareWrite(ctx, "create_cycle", json.RawMessage(`{"project":"FDA","name":"Sprint 2","start_date":"`+dd(8)+`","end_date":"`+dd(21)+`","item_keys":["FDA-3"]}`))
+	c.check("preview has dates and item, no overlap", err == nil && pv.Plan.Cycle != nil && len(pv.Plan.ItemIDs) == 1 && len(pv.Warnings) == 0 && strings.Contains(toJSON(pv.Lines), "FDA-3"), err, pv)
+	if err == nil {
+		r, err := e.app.ExecuteWrite(ctx, pv.Plan)
+		e.plane.mu.Lock()
+		posts := strings.Join(e.plane.posts, "|")
+		e.plane.mu.Unlock()
+		c.check("cycle created then item added", err == nil && strings.Contains(posts, "POST /projects/p1/cycles/") && strings.Contains(r["summary"].(string), "Sprint 2"), err, posts, r)
+	}
+
+	pv, err = e.app.PrepareWrite(ctx, "create_cycle", json.RawMessage(`{"project":"FDA","name":"Sprint 3","start_date":"`+dd(0)+`","end_date":"`+dd(10)+`"}`))
+	c.check("overlap warning", err == nil && len(pv.Warnings) == 1 && strings.Contains(pv.Warnings[0], "Sprint 1"), err, pv)
+	_, err = e.app.PrepareWrite(ctx, "create_cycle", json.RawMessage(`{"project":"FDA","name":"sprint 1","start_date":"`+dd(30)+`","end_date":"`+dd(40)+`"}`))
+	c.check("duplicate name refused", err != nil, err)
+	_, err = e.app.PrepareWrite(ctx, "create_cycle", json.RawMessage(`{"project":"FDA","name":"X","start_date":"`+dd(10)+`","end_date":"`+dd(5)+`"}`))
+	c.check("end before start refused", err != nil, err)
+}
+
 func TestNeedProjectPicker(t *testing.T) {
 	data := metricsData()
 	data["/projects/"] = pageOf(jo{"id": "p1", "name": "FDA Big Data", "identifier": "FDA"}, jo{"id": "p2", "name": "ERP", "identifier": "ERP"})

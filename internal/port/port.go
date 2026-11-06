@@ -42,6 +42,7 @@ type TaskProvider interface {
 	WorkItemByKey(ctx context.Context, key string) (domain.WorkItem, error)
 	CreateWorkItem(ctx context.Context, p domain.Project, body domain.WorkItemWrite) (domain.WorkItem, error)
 	UpdateWorkItem(ctx context.Context, p domain.Project, id string, body domain.WorkItemWrite) (domain.WorkItem, error)
+	CreateCycle(ctx context.Context, projectID string, c domain.CycleWrite) (domain.Cycle, error)
 	AddToCycle(ctx context.Context, projectID, cycleID string, itemIDs []string) error
 	AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error
 	AddComment(ctx context.Context, p domain.Project, itemID, html string) error

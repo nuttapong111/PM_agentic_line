@@ -71,6 +71,14 @@ type Cycle struct {
 	Status    string  `json:"status,omitempty"`
 }
 
+// CycleWrite is the body of a new cycle (sprint). Dates are YYYY-MM-DD.
+type CycleWrite struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	StartDate   string `json:"start_date"`
+	EndDate     string `json:"end_date"`
+}
+
 type Module struct {
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`

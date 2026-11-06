@@ -247,6 +247,11 @@ func (p *Provider) UpdateWorkItem(ctx context.Context, proj domain.Project, id s
 // AddToCycle does nothing: the built-in list has no cycles.
 func (p *Provider) AddToCycle(context.Context, string, string, []string) error { return nil }
 
+// CreateCycle is not available: the built-in list has no cycles.
+func (p *Provider) CreateCycle(context.Context, string, domain.CycleWrite) (domain.Cycle, error) {
+	return domain.Cycle{}, domain.UserError("ระบบงานในตัวของบอทไม่มี sprint ต้องเชื่อม Plane ก่อน")
+}
+
 // AddToModule does nothing: the built-in list has no modules.
 func (p *Provider) AddToModule(context.Context, string, string, []string) error { return nil }
 

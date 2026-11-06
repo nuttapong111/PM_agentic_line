@@ -420,6 +420,22 @@ func (c *Client) AddToCycle(ctx context.Context, projectID, cycleID string, item
 	return err
 }
 
+// CreateCycle creates a cycle owned by the token's user.
+func (c *Client) CreateCycle(ctx context.Context, projectID string, in domain.CycleWrite) (domain.Cycle, error) {
+	me, err := c.Me(ctx)
+	if err != nil {
+		return domain.Cycle{}, err
+	}
+	body := map[string]any{"name": in.Name, "start_date": in.StartDate, "end_date": in.EndDate, "project_id": projectID, "owned_by": me.ID}
+	if in.Description != "" {
+		body["description"] = in.Description
+	}
+	var out domain.Cycle
+	err = c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/cycles/", body, &out)
+	c.invalidate("cycles:" + projectID)
+	return out, err
+}
+
 // AddToModule puts work items into a module (Plane keeps the item's other modules).
 func (c *Client) AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error {
 	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", map[string]any{"issues": itemIDs}, nil)

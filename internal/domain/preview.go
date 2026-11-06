@@ -35,6 +35,7 @@ const (
 	PlanEmail        = "email"
 	PlanNotionPage   = "notion_page"
 	PlanComments     = "comments"
+	PlanCycle        = "cycle"
 )
 
 // WritePlan is what runs after the owner confirms. Which fields are used depends on Kind.
@@ -46,6 +47,8 @@ type WritePlan struct {
 	// create / update / comment
 	CycleID  *string         `json:"cycleId,omitempty"`
 	ModuleID *string         `json:"moduleId,omitempty"`
+	Cycle    *CycleWrite     `json:"cycle,omitempty"`
+	ItemIDs  []string        `json:"itemIds,omitempty"`
 	Items    json.RawMessage `json:"items,omitempty"` // []PlanItem (create) or []PlanTarget (comments)
 	ItemID   string          `json:"itemId,omitempty"`
 	Key      string          `json:"key,omitempty"`
