@@ -33,7 +33,11 @@ func (a *App) Minute(ctx context.Context, push Push) {
 			}()
 		}
 	}
-	if domain.HM(a.Now(), a.Loc) == "23:50" {
+	now := domain.HM(a.Now(), a.Loc)
+	if mm, _ := strconv.Atoi(now[3:]); mm%dashEvery == 0 {
+		go a.RefreshDashboards(ctx)
+	}
+	if now == "23:50" {
 		go a.SnapshotAll(ctx)
 	}
 }

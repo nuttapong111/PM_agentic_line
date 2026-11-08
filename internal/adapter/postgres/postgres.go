@@ -60,6 +60,9 @@ var schema = []string{
     status text not null default 'open', data jsonb not null, due_at timestamptz,
     created_at timestamptz not null default now(), updated_at timestamptz not null default now())`,
 	`create index if not exists pm_records_kind on pm_records (ws, kind, status)`,
+	`create table if not exists dashboard_cache (
+    ws text not null, project_id text not null, metrics jsonb not null,
+    updated_at timestamptz not null, primary key (ws, project_id))`,
 }
 
 func (db *DB) Migrate(ctx context.Context) error {

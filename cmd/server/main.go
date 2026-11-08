@@ -124,6 +124,7 @@ func run() error {
 			slog.Info("rich menu ready", "id", id)
 		}()
 	}
+	go app.RefreshDashboards(ctx) // the dashboard has current numbers soon after a deploy
 	go schedule(ctx, func() { app.Minute(ctx, srv.Push) })
 
 	hs := &http.Server{Addr: ":" + strconv.Itoa(cfg.Port), Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}

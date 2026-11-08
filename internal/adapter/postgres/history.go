@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nuttapong111/pm_agentic_line/internal/domain"
@@ -193,9 +194,9 @@ func (h *History) DeleteWorkspace(ctx context.Context, ws *string) error {
 	var qs []string
 	var args []any
 	if ws == nil {
-		qs = []string{`truncate metrics_daily, activity_log, usage_log, pm_records`, `delete from app_state`, `drop table if exists bt_comments, bt_items, bt_projects`}
+		qs = []string{`truncate metrics_daily, activity_log, usage_log, pm_records, dashboard_cache`, `delete from app_state`, `drop table if exists bt_comments, bt_items, bt_projects`}
 	} else {
-		qs = []string{`delete from metrics_daily where ws = $1`, `delete from activity_log where ws = $1`, `delete from pm_records where ws = $1`}
+		qs = []string{`delete from metrics_daily where ws = $1`, `delete from activity_log where ws = $1`, `delete from pm_records where ws = $1`, `delete from dashboard_cache where ws = $1`}
 		args = []any{*ws}
 	}
 	for _, q := range qs {
@@ -220,4 +221,36 @@ func (h *History) BackfillWorkspace(ctx context.Context, ws string) error {
 	}
 	_, err := h.db.Pool.Exec(ctx, `update metrics_daily set ws = $1 where ws is null`, ws)
 	return err
+}
+
+func (h *History) SaveDashboard(ctx context.Context, ws string, m domain.ProjectMetrics, at time.Time) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = h.db.Pool.Exec(ctx, `insert into dashboard_cache (ws, project_id, metrics, updated_at) values ($1, $2, $3, $4)
+on conflict (ws, project_id) do update set metrics = excluded.metrics, updated_at = excluded.updated_at`, ws, m.Project.ID, b, at)
+	return err
+}
+
+func (h *History) LoadDashboard(ctx context.Context, ws string) (map[string]port.DashboardPoint, error) {
+	rows, err := h.db.Pool.Query(ctx, `select project_id, metrics, updated_at from dashboard_cache where ws = $1`, ws)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]port.DashboardPoint{}
+	for rows.Next() {
+		var id string
+		var raw []byte
+		var p port.DashboardPoint
+		if err := rows.Scan(&id, &raw, &p.At); err != nil {
+			return nil, err
+		}
+		if json.Unmarshal(raw, &p.Metrics) != nil {
+			continue // written by an older version; the next refresh replaces it
+		}
+		out[id] = p
+	}
+	return out, rows.Err()
 }

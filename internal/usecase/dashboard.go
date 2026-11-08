@@ -20,7 +20,8 @@ type projectName struct {
 }
 
 // Dashboard is the main dashboard payload: followed projects and the selected one's metrics.
-func (a *App) Dashboard(ctx context.Context, want string) (map[string]any, error) {
+// fresh=true skips the stored metrics (the refresh button).
+func (a *App) Dashboard(ctx context.Context, want string, fresh bool) (map[string]any, error) {
 	ps, err := a.tasks().Projects(ctx)
 	if err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func (a *App) Dashboard(ctx context.Context, want string) (map[string]any, error
 	if sel == nil {
 		return map[string]any{"projects": []projectName{}, "metrics": nil}, nil
 	}
-	m, at, err := a.dashMetrics(ctx, *sel)
+	m, at, err := a.dashMetrics(ctx, *sel, fresh)
 	if err != nil {
 		return nil, err
 	}
@@ -168,18 +169,24 @@ func (a *App) OAuthPage(msg string, ok bool) string {
 		strings.ReplaceAll(msg, "<", "&lt;") + `</p><p><a href="` + html.EscapeString(back) + `">กลับไปหน้าตั้งค่า</a></p></body>`
 }
 
-// The dashboard serves metrics from memory: fresh for dashFresh, then the last result is shown at once
-// while a background refresh runs (up to dashStale). This keeps the page quick and well under the task
-// tool's rate limit when it is reloaded or left open.
+// The dashboard serves stored metrics instead of asking the task tool on every load:
+//   - every 15 minutes RefreshDashboards recomputes each followed project in the background;
+//   - results are kept in memory and in Postgres, so a restart or deploy serves them at once;
+//   - a load finds them fresh for dashFresh; older ones (up to dashStale) are shown at once while
+//     a background refresh runs; past dashStale, or with fresh=true (the refresh button), the load
+//     computes them now;
+//   - a confirmed write or a Plane webhook refreshes that project right away.
 const (
-	dashFresh = 30 * time.Second
-	dashStale = 30 * time.Minute
+	dashFresh = 15 * time.Minute
+	dashStale = 24 * time.Hour
+	dashEvery = 15 // minutes between background refreshes
 )
 
 type dashCache struct {
 	mu         sync.Mutex
-	entries    map[string]dashEntry
+	entries    map[string]dashEntry // by workspace + project ID
 	refreshing map[string]bool
+	loaded     map[string]bool // workspaces read back from the database
 }
 
 type dashEntry struct {
@@ -187,63 +194,146 @@ type dashEntry struct {
 	m  domain.ProjectMetrics
 }
 
-func (a *App) dashMetrics(ctx context.Context, p domain.Project) (domain.ProjectMetrics, time.Time, error) {
+func dashKey(ws, projectID string) string { return ws + "|" + projectID }
+
+// loadSavedDash fills the memory cache from the database once per workspace.
+func (a *App) loadSavedDash(ctx context.Context, ws string) {
 	c := &a.dash
 	c.mu.Lock()
-	e, ok := c.entries[p.ID]
-	age := time.Since(e.at)
+	done := c.loaded[ws]
+	if c.loaded == nil {
+		c.loaded = map[string]bool{}
+	}
+	c.loaded[ws] = true
+	c.mu.Unlock()
+	if done {
+		return
+	}
+	saved, err := a.History.LoadDashboard(ctx, ws)
+	if err != nil {
+		slog.Warn("saved dashboard unreadable", "err", err)
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil {
+		c.entries = map[string]dashEntry{}
+	}
+	for id, pt := range saved {
+		k := dashKey(ws, id)
+		if e, ok := c.entries[k]; !ok || e.at.Before(pt.At) {
+			c.entries[k] = dashEntry{pt.At, pt.Metrics}
+		}
+	}
+}
+
+func (a *App) dashMetrics(ctx context.Context, p domain.Project, fresh bool) (domain.ProjectMetrics, time.Time, error) {
+	if fresh {
+		return a.computeDash(port.WithFresh(ctx), p)
+	}
+	ws := a.ws()
+	a.loadSavedDash(ctx, ws)
+	c := &a.dash
+	c.mu.Lock()
+	e, ok := c.entries[dashKey(ws, p.ID)]
+	age := a.Now().Sub(e.at)
+	c.mu.Unlock()
 	if ok && age < dashFresh {
-		c.mu.Unlock()
 		return e.m, e.at, nil
 	}
 	if ok && age < dashStale {
-		if !c.refreshing[p.ID] {
-			if c.refreshing == nil {
-				c.refreshing = map[string]bool{}
-			}
-			c.refreshing[p.ID] = true
-			go func() {
-				bg, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-				defer cancel()
-				if _, _, err := a.computeDash(bg, p); err != nil {
-					slog.Warn("dashboard refresh failed", "project", p.Identifier, "err", err)
-				}
-				c.mu.Lock()
-				delete(c.refreshing, p.ID)
-				c.mu.Unlock()
-			}()
-		}
-		c.mu.Unlock()
+		a.refreshDashAsync(p)
 		return e.m, e.at, nil
 	}
-	c.mu.Unlock()
 	return a.computeDash(ctx, p)
 }
 
+// refreshDashAsync recomputes a project in the background unless that is already running.
+func (a *App) refreshDashAsync(p domain.Project) {
+	k := dashKey(a.ws(), p.ID)
+	c := &a.dash
+	c.mu.Lock()
+	if c.refreshing[k] {
+		c.mu.Unlock()
+		return
+	}
+	if c.refreshing == nil {
+		c.refreshing = map[string]bool{}
+	}
+	c.refreshing[k] = true
+	c.mu.Unlock()
+	go func() {
+		defer func() {
+			c.mu.Lock()
+			delete(c.refreshing, k)
+			c.mu.Unlock()
+		}()
+		bg, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if _, _, err := a.computeDash(bg, p); err != nil {
+			slog.Warn("dashboard refresh failed", "project", p.Identifier, "err", err)
+		}
+	}()
+}
+
 func (a *App) computeDash(ctx context.Context, p domain.Project) (domain.ProjectMetrics, time.Time, error) {
+	ws := a.ws()
 	m, err := a.ProjectMetrics(ctx, p)
 	if err != nil {
 		return m, time.Time{}, err
 	}
-	now := time.Now()
+	now := a.Now()
 	c := &a.dash
 	c.mu.Lock()
 	if c.entries == nil {
 		c.entries = map[string]dashEntry{}
 	}
-	c.entries[p.ID] = dashEntry{now, m}
+	c.entries[dashKey(ws, p.ID)] = dashEntry{now, m}
 	c.mu.Unlock()
-	go func() { // today's history point stays fresh
-		if err := a.Snapshot(context.Background(), m); err != nil {
+	go func() {
+		bg := context.Background()
+		if err := a.History.SaveDashboard(bg, ws, m, now); err != nil {
+			slog.Error("dashboard save failed", "err", err)
+		}
+		if err := a.Snapshot(bg, m); err != nil { // today's history point stays fresh
 			slog.Error("snapshot failed", "err", err)
 		}
 	}()
 	return m, now, nil
 }
 
-// ForgetDashboard drops cached dashboard metrics after a write so the next load is current.
+// RefreshDashboards recomputes every followed project, one after another (the scheduler runs it every 15 minutes).
+func (a *App) RefreshDashboards(ctx context.Context) {
+	if !a.dashMu.TryLock() {
+		return // the last round is still running
+	}
+	defer a.dashMu.Unlock()
+	ps, err := a.tasks().Projects(ctx)
+	if err != nil {
+		slog.Warn("dashboard refresh failed", "err", err)
+		return
+	}
+	for _, p := range ps {
+		if ctx.Err() != nil {
+			return
+		}
+		if _, _, err := a.computeDash(ctx, p); err != nil {
+			slog.Warn("dashboard refresh failed", "project", p.Identifier, "err", err)
+		}
+	}
+}
+
+// ForgetDashboard refreshes a project's dashboard after a write so the next load is current.
 func (a *App) ForgetDashboard(projectID string) {
+	ws := a.ws()
 	a.dash.mu.Lock()
-	delete(a.dash.entries, projectID)
+	delete(a.dash.entries, dashKey(ws, projectID))
 	a.dash.mu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if p, err := a.findProject(ctx, projectID); err == nil && p != nil {
+			a.refreshDashAsync(*p)
+		}
+	}()
 }

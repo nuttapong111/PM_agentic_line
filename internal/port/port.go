@@ -9,6 +9,14 @@ import (
 	"github.com/nuttapong111/pm_agentic_line/internal/domain"
 )
 
+type freshKey struct{}
+
+// WithFresh marks a request that must not be answered from an adapter's short-lived cache.
+func WithFresh(ctx context.Context) context.Context { return context.WithValue(ctx, freshKey{}, true) }
+
+// IsFresh reports a context marked by WithFresh.
+func IsFresh(ctx context.Context) bool { v, _ := ctx.Value(freshKey{}).(bool); return v }
+
 // Message is one chat message in the messenger's own JSON shape (LINE Messaging API).
 type Message = map[string]any
 
@@ -161,6 +169,16 @@ type HistoryRepo interface {
 	UsageThisMonth(ctx context.Context) (*int, error)
 	// BackfillWorkspace tags rows written before workspaces were tracked.
 	BackfillWorkspace(ctx context.Context, ws string) error
+	// SaveDashboard keeps the latest dashboard metrics of a project, so a restart serves them at once.
+	SaveDashboard(ctx context.Context, ws string, m domain.ProjectMetrics, at time.Time) error
+	// LoadDashboard returns the saved dashboard metrics of a workspace, by project ID.
+	LoadDashboard(ctx context.Context, ws string) (map[string]DashboardPoint, error)
+}
+
+// DashboardPoint is saved dashboard metrics and when they were computed.
+type DashboardPoint struct {
+	At      time.Time
+	Metrics domain.ProjectMetrics
 }
 
 // ---------------------------------------------------------------- external services

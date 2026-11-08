@@ -41,6 +41,7 @@ type App struct {
 	writes    map[string]bool
 	tickMu    sync.Mutex
 	dash      dashCache
+	dashMu    sync.Mutex // one background refresh round at a time
 }
 
 func New(d Deps) *App {

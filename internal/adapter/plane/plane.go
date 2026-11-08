@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/nuttapong111/pm_agentic_line/internal/domain"
+	"github.com/nuttapong111/pm_agentic_line/internal/port"
 )
 
 type Client struct {
@@ -208,10 +209,21 @@ func decodeAll[T any](raw []json.RawMessage) []T {
 	return out
 }
 
+// volatile keys hold data that changes during the day.
+func volatile(key string) bool {
+	for _, p := range []string{"items:", "cycles:", "modules:", "cycleitems:", "moduleitems:"} {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // cachedCall returns a fresh cached value, or loads it once even when several callers ask at the same time.
-func cachedCall[T any](c *Client, key string, ttl time.Duration, load func() (T, error)) (T, error) {
+// A context marked port.WithFresh skips the cached work items, cycles and modules (the dashboard refresh button).
+func cachedCall[T any](ctx context.Context, c *Client, key string, ttl time.Duration, load func() (T, error)) (T, error) {
 	c.mu.Lock()
-	if hit, ok := c.cache[key]; ok && time.Since(hit.at) < ttl {
+	if hit, ok := c.cache[key]; ok && time.Since(hit.at) < ttl && !(port.IsFresh(ctx) && volatile(key)) {
 		c.mu.Unlock()
 		return hit.value.(T), nil
 	}
@@ -279,7 +291,7 @@ func (c *Client) items(ctx context.Context) (string, error) {
 // ---------------------------------------------------------------- reads
 
 func (c *Client) Me(ctx context.Context) (domain.Member, error) {
-	return cachedCall(c, "me", time.Hour, func() (domain.Member, error) {
+	return cachedCall(ctx, c, "me", time.Hour, func() (domain.Member, error) {
 		var m domain.Member
 		err := c.request(ctx, http.MethodGet, c.baseURL+"/api/v1/users/me/", nil, &m)
 		return m, err
@@ -287,7 +299,7 @@ func (c *Client) Me(ctx context.Context) (domain.Member, error) {
 }
 
 func (c *Client) AllProjects(ctx context.Context) ([]domain.Project, error) {
-	return cachedCall(c, "projects", 10*time.Minute, func() ([]domain.Project, error) {
+	return cachedCall(ctx, c, "projects", 10*time.Minute, func() ([]domain.Project, error) {
 		raw, err := c.listAll(ctx, "/projects/", nil)
 		return decodeAll[domain.Project](raw), err
 	})
@@ -312,14 +324,14 @@ func (c *Client) Projects(ctx context.Context) ([]domain.Project, error) {
 }
 
 func (c *Client) States(ctx context.Context, projectID string) ([]domain.State, error) {
-	return cachedCall(c, "states:"+projectID, 10*time.Minute, func() ([]domain.State, error) {
+	return cachedCall(ctx, c, "states:"+projectID, 10*time.Minute, func() ([]domain.State, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/states/", nil)
 		return decodeAll[domain.State](raw), err
 	})
 }
 
 func (c *Client) Members(ctx context.Context, projectID string) ([]domain.Member, error) {
-	return cachedCall(c, "members:"+projectID, 10*time.Minute, func() ([]domain.Member, error) {
+	return cachedCall(ctx, c, "members:"+projectID, 10*time.Minute, func() ([]domain.Member, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/project-members/", nil)
 		if err != nil {
 			return nil, err
@@ -350,21 +362,21 @@ func decodeMembers(raw []json.RawMessage) []domain.Member {
 }
 
 func (c *Client) Labels(ctx context.Context, projectID string) ([]domain.Label, error) {
-	return cachedCall(c, "labels:"+projectID, 10*time.Minute, func() ([]domain.Label, error) {
+	return cachedCall(ctx, c, "labels:"+projectID, 10*time.Minute, func() ([]domain.Label, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/labels/", nil)
 		return decodeAll[domain.Label](raw), err
 	})
 }
 
 func (c *Client) Cycles(ctx context.Context, projectID string) ([]domain.Cycle, error) {
-	return cachedCall(c, "cycles:"+projectID, 5*time.Minute, func() ([]domain.Cycle, error) {
+	return cachedCall(ctx, c, "cycles:"+projectID, 5*time.Minute, func() ([]domain.Cycle, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/cycles/", map[string]string{"cycle_view": "all"})
 		return decodeAll[domain.Cycle](raw), err
 	})
 }
 
 func (c *Client) Modules(ctx context.Context, projectID string) ([]domain.Module, error) {
-	return cachedCall(c, "modules:"+projectID, 5*time.Minute, func() ([]domain.Module, error) {
+	return cachedCall(ctx, c, "modules:"+projectID, 5*time.Minute, func() ([]domain.Module, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/modules/", nil)
 		return decodeAll[domain.Module](raw), err
 	})
@@ -377,7 +389,7 @@ type link struct {
 }
 
 func (c *Client) CycleLinks(ctx context.Context, projectID, cycleID string) ([]domain.CycleLink, error) {
-	return cachedCall(c, "cycleitems:"+projectID+":"+cycleID, 5*time.Minute, func() ([]domain.CycleLink, error) {
+	return cachedCall(ctx, c, "cycleitems:"+projectID+":"+cycleID, 5*time.Minute, func() ([]domain.CycleLink, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/cycles/"+cycleID+"/cycle-issues/", nil)
 		out := []domain.CycleLink{}
 		for _, l := range decodeAll[link](raw) {
@@ -392,7 +404,7 @@ func (c *Client) CycleLinks(ctx context.Context, projectID, cycleID string) ([]d
 }
 
 func (c *Client) ModuleItemIDs(ctx context.Context, projectID, moduleID string) ([]string, error) {
-	return cachedCall(c, "moduleitems:"+projectID+":"+moduleID, 10*time.Minute, func() ([]string, error) {
+	return cachedCall(ctx, c, "moduleitems:"+projectID+":"+moduleID, 10*time.Minute, func() ([]string, error) {
 		raw, err := c.listAll(ctx, "/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", nil)
 		out := []string{}
 		for _, l := range decodeAll[link](raw) {
@@ -407,7 +419,7 @@ func (c *Client) ModuleItemIDs(ctx context.Context, projectID, moduleID string) 
 }
 
 func (c *Client) WorkItems(ctx context.Context, p domain.Project) ([]domain.WorkItem, error) {
-	return cachedCall(c, "items:"+p.ID, 2*time.Minute, func() ([]domain.WorkItem, error) {
+	return cachedCall(ctx, c, "items:"+p.ID, 2*time.Minute, func() ([]domain.WorkItem, error) {
 		path, err := c.items(ctx)
 		if err != nil {
 			return nil, err
@@ -497,7 +509,7 @@ func (c *Client) NewProject(ctx context.Context, in domain.ProjectWrite) (domain
 
 // WorkspaceMembers lists everyone in the workspace.
 func (c *Client) WorkspaceMembers(ctx context.Context) ([]domain.Member, error) {
-	return cachedCall(c, "wsmembers", 10*time.Minute, func() ([]domain.Member, error) {
+	return cachedCall(ctx, c, "wsmembers", 10*time.Minute, func() ([]domain.Member, error) {
 		raw, err := c.listAll(ctx, "/members/", nil)
 		if err != nil {
 			return nil, err
