@@ -756,12 +756,15 @@ func (a *App) PlaneWebhook(ctx context.Context, body []byte, push Push) {
 		nv = fmt.Sprint(ev.Activity.NewValue)
 	}
 	isIssue := ev.Event == "issue" || ev.Event == "work_item"
-	if !isIssue || ev.Action != "updated" || ev.Activity.Field != "state" || !blockRe.MatchString(nv) || a.Cfg.OwnerUserID == "" {
-		return
-	}
 	pid := ev.Data.Project
 	if pid == "" {
 		pid = ev.Data.ProjectID
+	}
+	if pid != "" && (isIssue || ev.Event == "cycle" || ev.Event == "module") {
+		a.ForgetDashboard(pid) // the dashboard shows the change without waiting for the 15-minute round
+	}
+	if !isIssue || ev.Action != "updated" || ev.Activity.Field != "state" || !blockRe.MatchString(nv) || a.Cfg.OwnerUserID == "" {
+		return
 	}
 	ps, err := a.tasks().Projects(ctx)
 	if err != nil {

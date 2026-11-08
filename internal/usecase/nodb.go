@@ -47,3 +47,9 @@ func (NoHistory) Export(context.Context, string) (port.ExportData, error) {
 func (NoHistory) DeleteWorkspace(context.Context, *string) error  { return nil }
 func (NoHistory) UsageThisMonth(context.Context) (*int, error)    { return nil, nil }
 func (NoHistory) BackfillWorkspace(context.Context, string) error { return nil }
+func (NoHistory) SaveDashboard(context.Context, string, domain.ProjectMetrics, time.Time) error {
+	return nil
+}
+func (NoHistory) LoadDashboard(context.Context, string) (map[string]port.DashboardPoint, error) {
+	return nil, nil
+}

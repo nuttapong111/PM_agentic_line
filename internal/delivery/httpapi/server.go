@@ -55,7 +55,7 @@ func (s *Server) Handler() http.Handler {
 		page(w, 200, s.DashboardHTML)
 	})
 	m.HandleFunc("GET /api/dashboard", s.queryAuth(func(w http.ResponseWriter, r *http.Request) {
-		out, err := s.App.Dashboard(r.Context(), r.URL.Query().Get("project"))
+		out, err := s.App.Dashboard(r.Context(), r.URL.Query().Get("project"), r.URL.Query().Get("fresh") == "1")
 		if err != nil {
 			slog.Error("dashboard api failed", "err", err)
 			writeErr(w, 502, err)

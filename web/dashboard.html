@@ -534,13 +534,14 @@
   }
 
   let loading = false;
-  async function load() {
+  // fresh = the refresh button: skip the numbers the server refreshes every 15 minutes.
+  async function load(fresh = false) {
     if (loading) return;
     loading = true; $("refresh").setAttribute("aria-busy", "true");
     // History and records only need the project id: when it is known, fetch all three at once.
     const side = project ? [loadHistory(), loadRecords()] : [];
     try {
-      const data = await api("/api/dashboard", project ? { project } : {});
+      const data = await api("/api/dashboard", { ...(project ? { project } : {}), ...(fresh === true ? { fresh: "1" } : {}) });
       $("error").style.display = "none";
       if (!data.metrics) { $("title").textContent = "ยังไม่มีโปรเจกต์ · เชื่อมระบบจัดการงานที่หน้าตั้งค่า"; return; }
       const first = !project;
@@ -562,7 +563,7 @@
     }
   }
 
-  $("refresh").addEventListener("click", load);
+  $("refresh").addEventListener("click", () => load(true));
   $("goAttention").addEventListener("click", () => {
     if (metrics) tab = metrics.counts.overdue ? "overdue" : metrics.counts.blocked ? "blocked" : "due";
     renderAttention(); $("attention").scrollIntoView({ behavior: "smooth" });

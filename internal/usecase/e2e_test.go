@@ -59,6 +59,7 @@ type mockPlane struct {
 	data     map[string]any
 	comments []string
 	posts    []string
+	itemGets int // GETs of a project's work-item list
 }
 
 func newMockPlane(t *testing.T, data map[string]any) *mockPlane {
@@ -70,6 +71,11 @@ func newMockPlane(t *testing.T, data map[string]any) *mockPlane {
 			return
 		}
 		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/v1/workspaces/ws"), "/api/v1")
+		if r.Method == http.MethodGet && strings.HasSuffix(key, "/work-items/") && r.URL.Query().Get("per_page") != "1" {
+			m.mu.Lock()
+			m.itemGets++
+			m.mu.Unlock()
+		}
 		if r.Method == http.MethodPost || r.Method == http.MethodPatch {
 			if _, deny := m.data["DENY "+r.Method+" "+key]; deny {
 				w.WriteHeader(405)
@@ -651,7 +657,7 @@ func TestFeaturesWithPostgres(t *testing.T) {
 	// dashboard APIs
 	dr, err := a.DashboardRecords(ctx, "p1")
 	c.check("records API", err == nil && dr["enabled"] == true && len(dr["risks"].([]domain.Record)) == 1, dr)
-	dash, err := a.Dashboard(ctx, "")
+	dash, err := a.Dashboard(ctx, "", false)
 	c.check("dashboard API", err == nil && dash["selected"] == "p1", dash)
 
 	// settings
@@ -746,4 +752,35 @@ func TestStateAndHistoryPostgres(t *testing.T) {
 	}
 	c.check("activity logged", logged, h.Activity)
 	c.check("usage logged", len(h.Usage) > 0 && h.Usage[0].Calls >= 1, h.Usage)
+}
+
+// The dashboard serves stored metrics: no task-tool calls on a reload, and a restart reads them back from Postgres.
+func TestDashboardCache(t *testing.T) {
+	e := newEnv(t, metricsData(), true)
+	a, c, ctx := e.app, checker{t}, context.Background()
+	gets := func() int { e.plane.mu.Lock(); defer e.plane.mu.Unlock(); return e.plane.itemGets }
+
+	a.RefreshDashboards(ctx)
+	after := gets()
+	c.check("background round loads the project", after >= 1, after)
+	d1, err := a.Dashboard(ctx, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d2, _ := a.Dashboard(ctx, "p1", false)
+	c.check("reloads come from the cache", gets() == after && d1["updatedAt"] == d2["updatedAt"], gets(), after)
+
+	// a new App on the same database (a restart) serves the saved numbers without asking Plane
+	time.Sleep(200 * time.Millisecond) // the save runs in the background
+	again := New(Deps{Cfg: a.Cfg, Loc: a.Loc, Now: a.Now, Store: a.Store, Tasks: a.Tasks, Records: a.Records, History: a.History, Secrets: a.Secrets, LLM: e.llm, View: a.View})
+	before := gets()
+	d3, err := again.Dashboard(ctx, "p1", false)
+	m3, _ := d3["metrics"].(domain.ProjectMetrics)
+	c.check("restart serves the saved metrics", err == nil && gets() == before && m3.Counts.Open == 3, err, gets(), before)
+
+	// the refresh button asks Plane again
+	time.Sleep(10 * time.Millisecond)
+	before = gets()
+	d4, _ := again.Dashboard(ctx, "p1", true)
+	c.check("fresh=true asks Plane again", gets() > before && d4["updatedAt"] != d3["updatedAt"], gets(), before)
 }
