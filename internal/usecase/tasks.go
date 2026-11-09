@@ -151,6 +151,10 @@ func (NoProvider) CreateCycle(context.Context, string, domain.CycleWrite) (domai
 func (NoProvider) UpdateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
 	return domain.Module{}, domain.ErrTaskNotConnected
 }
+
+func (NoProvider) CreateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
+	return domain.Module{}, domain.ErrTaskNotConnected
+}
 func (NoProvider) AddToModule(context.Context, string, string, []string) error {
 	return domain.ErrTaskNotConnected
 }

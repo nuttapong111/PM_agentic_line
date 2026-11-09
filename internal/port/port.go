@@ -60,6 +60,8 @@ type TaskProvider interface {
 	AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error
 	// UpdateModule sets a module's start and target dates (nil leaves a date as it is).
 	UpdateModule(ctx context.Context, projectID, moduleID string, in domain.ModuleWrite) (domain.Module, error)
+	// CreateModule makes a new module with optional start and target dates.
+	CreateModule(ctx context.Context, projectID, name string, in domain.ModuleWrite) (domain.Module, error)
 	AddComment(ctx context.Context, p domain.Project, itemID, html string) error
 	ItemURL(it domain.WorkItem) string
 	KeyURL(key string) string

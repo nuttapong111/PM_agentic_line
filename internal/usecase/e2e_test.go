@@ -811,3 +811,25 @@ func TestSetModuleDates(t *testing.T) {
 	_, err = a.PrepareWrite(ctx, "set_module_dates", raw(jo{"modules": []any{jo{"module": "UAT", "target_date": "15/12"}}}))
 	c.check("bad date refused", err != nil, err)
 }
+
+func TestCreateModule(t *testing.T) {
+	data := metricsData()
+	data["/projects/p1/modules/"] = pageOf(jo{"id": "m1", "name": "Login"})
+	e := newEnv(t, data, false)
+	a, c, ctx := e.app, checker{t}, context.Background()
+	a.Store.Update(func(s *domain.AppState) { s.CurrentProjectID = ptr("p1") })
+
+	pv, err := a.PrepareWrite(ctx, "create_module", raw(jo{"modules": []any{jo{"name": "Qrant", "start_date": dd(3), "target_date": dd(8)}}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.check("preview names the module", pv.Title == "สร้าง module Qrant" && len(pv.Lines) == 1, pv)
+	r, err := a.ExecuteWrite(ctx, pv.Plan)
+	c.check("executed", err == nil && r["summary"] == "สร้าง module Qrant", r, err)
+	c.check("POSTed the module", strings.Join(e.plane.posts, ",") == "POST /projects/p1/modules/", e.plane.posts)
+
+	_, err = a.PrepareWrite(ctx, "create_module", raw(jo{"modules": []any{jo{"name": "login"}}}))
+	c.check("existing name refused", err != nil && strings.Contains(err.Error(), "อยู่แล้ว"), err)
+	_, err = a.PrepareWrite(ctx, "create_module", raw(jo{"modules": []any{jo{"name": "X", "start_date": dd(5), "target_date": dd(1)}}}))
+	c.check("end before start refused", err != nil && strings.Contains(err.Error(), "ต้องไม่ก่อนวันเริ่ม"), err)
+}

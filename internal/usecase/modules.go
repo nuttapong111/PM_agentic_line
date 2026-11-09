@@ -119,3 +119,68 @@ func (a *App) prepareModuleDates(ctx context.Context, raw json.RawMessage) (doma
 		Plan: domain.WritePlan{Kind: domain.PlanModules, ProjectID: &p.ID, Items: domain.MustJSON(changes)},
 	}, nil
 }
+
+func (a *App) prepareCreateModules(ctx context.Context, raw json.RawMessage) (domain.Preview, error) {
+	var in struct {
+		Project string
+		Modules []struct {
+			Name       string
+			StartDate  *string `json:"start_date"`
+			TargetDate *string `json:"target_date"`
+		}
+	}
+	if err := decode(raw, &in); err != nil {
+		return domain.Preview{}, err
+	}
+	if len(in.Modules) == 0 {
+		return domain.Preview{}, domain.UserError("ระบุชื่อ module อย่างน้อย 1 ตัว")
+	}
+	p, err := a.ResolveProject(ctx, in.Project)
+	if err != nil {
+		return domain.Preview{}, err
+	}
+	mods, err := a.tasks().Modules(ctx, p.ID)
+	if err != nil {
+		return domain.Preview{}, err
+	}
+	taken := map[string]bool{}
+	for _, m := range mods {
+		taken[domain.Norm(m.Name)] = true
+	}
+	changes := []domain.PlanModule{}
+	lines := []domain.PreviewLine{}
+	for _, x := range in.Modules {
+		name := strings.TrimSpace(x.Name)
+		if name == "" {
+			return domain.Preview{}, domain.UserError("ระบุชื่อ module")
+		}
+		if taken[domain.Norm(name)] {
+			return domain.Preview{}, domain.UserError(fmt.Sprintf(`มี module "%s" อยู่แล้ว`, name))
+		}
+		taken[domain.Norm(name)] = true
+		for _, d := range []**string{&x.StartDate, &x.TargetDate} {
+			if *d != nil && strings.TrimSpace(**d) == "" {
+				*d = nil
+			}
+		}
+		if err := domain.CheckDate(x.StartDate, "start_date"); err != nil {
+			return domain.Preview{}, err
+		}
+		if err := domain.CheckDate(x.TargetDate, "target_date"); err != nil {
+			return domain.Preview{}, err
+		}
+		if x.StartDate != nil && x.TargetDate != nil && *x.TargetDate < *x.StartDate {
+			return domain.Preview{}, domain.UserError(fmt.Sprintf("วันจบของ %s (%s) ต้องไม่ก่อนวันเริ่ม (%s)", name, dateText(x.TargetDate), dateText(x.StartDate)))
+		}
+		changes = append(changes, domain.PlanModule{Name: name, ModuleWrite: domain.ModuleWrite{StartDate: x.StartDate, TargetDate: x.TargetDate}})
+		lines = append(lines, domain.PreviewLine{Text: name, Sub: fmt.Sprintf("%s – %s", dateText(x.StartDate), dateText(x.TargetDate))})
+	}
+	title := "สร้าง module " + changes[0].Name
+	if len(changes) > 1 {
+		title = fmt.Sprintf("สร้าง %d module", len(changes))
+	}
+	return domain.Preview{
+		Title: title, Subtitle: p.Name, Lines: lines, Warnings: []string{}, ConfirmLabel: "ยืนยัน สร้าง module",
+		Plan: domain.WritePlan{Kind: domain.PlanModules, ProjectID: &p.ID, Items: domain.MustJSON(changes)},
+	}, nil
+}

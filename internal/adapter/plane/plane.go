@@ -561,6 +561,21 @@ func (c *Client) UpdateModule(ctx context.Context, projectID, moduleID string, i
 	return out, err
 }
 
+// CreateModule makes a new module in the project.
+func (c *Client) CreateModule(ctx context.Context, projectID, name string, in domain.ModuleWrite) (domain.Module, error) {
+	body := map[string]any{"name": name}
+	if in.StartDate != nil {
+		body["start_date"] = *in.StartDate
+	}
+	if in.TargetDate != nil {
+		body["target_date"] = *in.TargetDate
+	}
+	var out domain.Module
+	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/modules/", body, &out)
+	c.invalidate("modules:" + projectID)
+	return out, err
+}
+
 // AddToModule puts work items into a module (Plane keeps the item's other modules).
 func (c *Client) AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error {
 	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", map[string]any{"issues": itemIDs}, nil)

@@ -97,9 +97,9 @@ type PlanItem struct {
 	ParentIndex *int `json:"parentIndex,omitempty"`
 }
 
-// PlanModule is one module whose dates change.
+// PlanModule is one module whose dates change. An empty ModuleID means the module is created.
 type PlanModule struct {
-	ModuleID string `json:"moduleId"`
+	ModuleID string `json:"moduleId,omitempty"`
 	Name     string `json:"name"`
 	ModuleWrite
 }

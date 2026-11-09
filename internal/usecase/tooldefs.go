@@ -118,6 +118,15 @@ var coreTools = []port.ToolDef{
 				"target_date": str("วันจบหรือกำหนดส่งของ module"),
 			}, "module")},
 		}, "modules")),
+	tool("create_module", "สร้าง module ใหม่ในโปรเจกต์ ทำได้หลาย module ในครั้งเดียว ตั้งวันเริ่มและวันจบไปพร้อมกันได้ (ต้องยืนยันก่อน) วันที่ใช้รูปแบบ YYYY-MM-DD ถ้าจะใส่งานเข้า module ใหม่ ให้สร้าง module ก่อนแล้วค่อยย้ายงาน",
+		coreObj(schema{
+			"project": coreProject,
+			"modules": schema{"type": "array", "items": obj(schema{
+				"name":        str("ชื่อ module"),
+				"start_date":  str(""),
+				"target_date": str("วันจบหรือกำหนดส่งของ module"),
+			}, "name")},
+		}, "modules")),
 	tool("add_comment", "เพิ่มคอมเมนต์ในงาน (ต้องยืนยันก่อน)", coreObj(schema{"key": str(""), "text": str("")}, "key", "text")),
 	tool("dashboard_link", "ลิงก์หน้า dashboard บนเว็บ", coreObj(schema{"project": coreProject})),
 }
@@ -187,7 +196,7 @@ var featureTools = []port.ToolDef{
 	tool("settings_link", "ลิงก์หน้าตั้งค่าบนเว็บ (การเชื่อมต่อ เปลี่ยนบัญชี ชื่อเล่น การแจ้งเตือน)", obj(schema{})),
 }
 
-var writeTools = []string{"create_work_items", "update_work_item", "create_cycle", "set_module_dates", "create_project", "add_project_members", "add_comment",
+var writeTools = []string{"create_work_items", "update_work_item", "create_cycle", "set_module_dates", "create_module", "create_project", "add_project_members", "add_comment",
 	"log_risk", "update_record", "log_change_request", "set_milestone", "set_budget", "log_effort", "schedule_meeting", "send_email", "save_to_notion", "nudge_stale"}
 
 func (a *App) initTools() {

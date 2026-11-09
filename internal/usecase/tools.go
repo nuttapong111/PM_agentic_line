@@ -280,6 +280,8 @@ func (a *App) PrepareWrite(ctx context.Context, name string, raw json.RawMessage
 		return a.prepareUpdate(ctx, raw)
 	case "create_cycle":
 		return a.prepareCycle(ctx, raw)
+	case "create_module":
+		return a.prepareCreateModules(ctx, raw)
 	case "set_module_dates":
 		return a.prepareModuleDates(ctx, raw)
 	case "create_project":
@@ -654,16 +656,26 @@ func (a *App) ExecuteWrite(ctx context.Context, plan domain.WritePlan) (Result, 
 	switch plan.Kind {
 	case domain.PlanModules:
 		done := []string{}
+		verb := "ตั้งวันของ module"
+		if ch := plan.ModuleChanges(); len(ch) > 0 && ch[0].ModuleID == "" {
+			verb = "สร้าง module"
+		}
 		for _, m := range plan.ModuleChanges() {
-			if _, err := tp.UpdateModule(ctx, project.ID, m.ModuleID, m.ModuleWrite); err != nil {
+			var err error
+			if m.ModuleID == "" {
+				_, err = tp.CreateModule(ctx, project.ID, m.Name, m.ModuleWrite)
+			} else {
+				_, err = tp.UpdateModule(ctx, project.ID, m.ModuleID, m.ModuleWrite)
+			}
+			if err != nil {
 				if len(done) > 0 {
-					return nil, fmt.Errorf("ตั้งวันของ %s แล้ว แต่ %s ไม่สำเร็จ: %w", strings.Join(done, ", "), m.Name, err)
+					return nil, fmt.Errorf("%s %s แล้ว แต่ %s ไม่สำเร็จ: %w", verb, strings.Join(done, ", "), m.Name, err)
 				}
 				return nil, err
 			}
 			done = append(done, m.Name)
 		}
-		return Result{"summary": "ตั้งวันของ module " + strings.Join(done, ", "), "modules": done,
+		return Result{"summary": verb + " " + strings.Join(done, ", "), "modules": done,
 			"links": []domain.Link{{Label: "เปิดโปรเจกต์ใน Plane", URL: tp.ProjectURL(*project)}}}, nil
 	case domain.PlanCycle:
 		if plan.Cycle == nil {
