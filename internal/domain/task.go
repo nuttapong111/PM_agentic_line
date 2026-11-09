@@ -101,6 +101,12 @@ type Module struct {
 	Status     string  `json:"status,omitempty"`
 }
 
+// ModuleWrite changes a module's dates (YYYY-MM-DD). A nil field is left as it is.
+type ModuleWrite struct {
+	StartDate  *string `json:"start_date,omitempty"`
+	TargetDate *string `json:"target_date,omitempty"`
+}
+
 // CycleLink records when a work item was put into a cycle.
 type CycleLink struct {
 	IssueID string `json:"issueId"`

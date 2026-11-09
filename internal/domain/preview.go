@@ -38,6 +38,7 @@ const (
 	PlanCycle        = "cycle"
 	PlanProject      = "project"
 	PlanMembers      = "members"
+	PlanModules      = "modules"
 )
 
 // WritePlan is what runs after the owner confirms. Which fields are used depends on Kind.
@@ -94,6 +95,20 @@ type WritePlan struct {
 type PlanItem struct {
 	WorkItemWrite
 	ParentIndex *int `json:"parentIndex,omitempty"`
+}
+
+// PlanModule is one module whose dates change. An empty ModuleID means the module is created.
+type PlanModule struct {
+	ModuleID string `json:"moduleId,omitempty"`
+	Name     string `json:"name"`
+	ModuleWrite
+}
+
+// ModuleChanges decodes the items of a modules plan.
+func (p WritePlan) ModuleChanges() []PlanModule {
+	var out []PlanModule
+	_ = json.Unmarshal(p.Items, &out)
+	return out
 }
 
 // PlanTarget is a work item a comment goes to.

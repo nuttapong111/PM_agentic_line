@@ -148,6 +148,13 @@ func (NoProvider) MembersURL(domain.Project) string { return "" }
 func (NoProvider) CreateCycle(context.Context, string, domain.CycleWrite) (domain.Cycle, error) {
 	return domain.Cycle{}, domain.ErrTaskNotConnected
 }
+func (NoProvider) UpdateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
+	return domain.Module{}, domain.ErrTaskNotConnected
+}
+
+func (NoProvider) CreateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
+	return domain.Module{}, domain.ErrTaskNotConnected
+}
 func (NoProvider) AddToModule(context.Context, string, string, []string) error {
 	return domain.ErrTaskNotConnected
 }

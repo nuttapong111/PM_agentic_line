@@ -267,6 +267,15 @@ func (p *Provider) CreateCycle(context.Context, string, domain.CycleWrite) (doma
 	return domain.Cycle{}, domain.UserError("ระบบงานในตัวของบอทไม่มี sprint ต้องเชื่อม Plane ก่อน")
 }
 
+// UpdateModule is not available: the built-in list has no modules.
+func (p *Provider) UpdateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
+	return domain.Module{}, domain.UserError("ระบบงานในตัวของบอทไม่มี module ต้องเชื่อม Plane ก่อน")
+}
+
+func (p *Provider) CreateModule(context.Context, string, string, domain.ModuleWrite) (domain.Module, error) {
+	return domain.Module{}, domain.UserError("ระบบงานในตัวของบอทไม่มี module ต้องเชื่อม Plane ก่อน")
+}
+
 // AddToModule does nothing: the built-in list has no modules.
 func (p *Provider) AddToModule(context.Context, string, string, []string) error { return nil }
 
