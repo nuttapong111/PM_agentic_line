@@ -546,6 +546,21 @@ func (c *Client) CreateCycle(ctx context.Context, projectID string, in domain.Cy
 	return out, err
 }
 
+// UpdateModule sets a module's start and target dates.
+func (c *Client) UpdateModule(ctx context.Context, projectID, moduleID string, in domain.ModuleWrite) (domain.Module, error) {
+	body := map[string]any{}
+	if in.StartDate != nil {
+		body["start_date"] = *in.StartDate
+	}
+	if in.TargetDate != nil {
+		body["target_date"] = *in.TargetDate
+	}
+	var out domain.Module
+	err := c.request(ctx, http.MethodPatch, c.base+"/projects/"+projectID+"/modules/"+moduleID+"/", body, &out)
+	c.invalidate("modules:" + projectID)
+	return out, err
+}
+
 // AddToModule puts work items into a module (Plane keeps the item's other modules).
 func (c *Client) AddToModule(ctx context.Context, projectID, moduleID string, itemIDs []string) error {
 	err := c.request(ctx, http.MethodPost, c.base+"/projects/"+projectID+"/modules/"+moduleID+"/module-issues/", map[string]any{"issues": itemIDs}, nil)

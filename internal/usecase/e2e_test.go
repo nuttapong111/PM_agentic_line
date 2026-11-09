@@ -784,3 +784,30 @@ func TestDashboardCache(t *testing.T) {
 	d4, _ := again.Dashboard(ctx, "p1", true)
 	c.check("fresh=true asks Plane again", gets() > before && d4["updatedAt"] != d3["updatedAt"], gets(), before)
 }
+
+func TestSetModuleDates(t *testing.T) {
+	data := metricsData()
+	data["/projects/p1/modules/"] = pageOf(jo{"id": "m1", "name": "Login", "start_date": dd(-10), "target_date": dd(2)}, jo{"id": "m2", "name": "UAT"})
+	e := newEnv(t, data, false)
+	a, c, ctx := e.app, checker{t}, context.Background()
+	a.Store.Update(func(s *domain.AppState) { s.CurrentProjectID = ptr("p1") })
+
+	pv, err := a.PrepareWrite(ctx, "set_module_dates", raw(jo{"modules": []any{
+		jo{"module": "uat", "start_date": dd(20), "target_date": dd(30)},
+		jo{"module": "Login", "target_date": dd(5)},
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.check("preview lists both modules", len(pv.Lines) == 2 && pv.Lines[0].Text == "UAT" && strings.Contains(pv.Lines[1].Sub, "เดิม"), pv.Lines)
+	r, err := a.ExecuteWrite(ctx, pv.Plan)
+	c.check("executed", err == nil && strings.Contains(r["summary"].(string), "UAT, Login"), r, err)
+	c.check("PATCHed both modules", strings.Join(e.plane.posts, ",") == "PATCH /projects/p1/modules/m2/,PATCH /projects/p1/modules/m1/", e.plane.posts)
+
+	_, err = a.PrepareWrite(ctx, "set_module_dates", raw(jo{"modules": []any{jo{"module": "Login", "target_date": dd(-20)}}}))
+	c.check("end before existing start is refused", err != nil && strings.Contains(err.Error(), "ต้องไม่ก่อนวันเริ่ม"), err)
+	_, err = a.PrepareWrite(ctx, "set_module_dates", raw(jo{"modules": []any{jo{"module": "Payments", "target_date": dd(5)}}}))
+	c.check("unknown module lists the real ones", err != nil && strings.Contains(err.Error(), "Login, UAT"), err)
+	_, err = a.PrepareWrite(ctx, "set_module_dates", raw(jo{"modules": []any{jo{"module": "UAT", "target_date": "15/12"}}}))
+	c.check("bad date refused", err != nil, err)
+}
